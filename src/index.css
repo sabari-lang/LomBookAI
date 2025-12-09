@@ -1,0 +1,268 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+body {
+  font-family: "Inter", "Roboto", "Helvetica Neue", Arial, sans-serif !important;
+}
+
+/* FORM STYLES START */
+
+.form-label {
+  font-size: 0.8rem !important;
+}
+
+
+textarea {
+  font-size: 0.85rem !important;
+}
+
+.input-group-text {
+  height: 38px;
+  width: auto;
+  font-size: 0.75rem;
+  border-color: #d0d4db;
+}
+
+.nav-tabs .nav-link {
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #444;
+  font-size: 0.9rem;
+}
+
+.nav-tabs .nav-link.active {
+  border-color: #0d6efd;
+  font-weight: 500;
+  color: #0d6efd;
+  background-color: transparent;
+}
+
+/* FORM STYLE END */
+
+/* TABLE STYLES START */
+/* 🌐 COMMON TABLE STYLES — applies to all tables */
+.common-page {
+  background-color: #fff;
+  padding: 1rem;
+  font-size: 14px;
+}
+
+/* 🧭 Header Section */
+.common-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.common-header h5 {
+  font-weight: 600;
+  margin: 0;
+}
+
+.common-header .dropdown-toggle {
+  border: none;
+  background: #fff;
+  padding: 0;
+  font-size: 14px;
+}
+
+/* ➕ Primary Button */
+.btn-primary {
+  background-color: #2f80ed;
+  border-color: #2f80ed;
+}
+
+.btn-primary:hover {
+  background-color: #256cd1;
+}
+
+/* ⋯ Icon / Light Button */
+.btn-light {
+  background-color: #f8f9fa;
+}
+
+/* 📝 Table Container */
+.common-table-container {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+/* 📊 Table */
+.common-table {
+  margin-bottom: 0;
+  width: 100%;
+  border-collapse: collapse;
+  /* min-height: 50vh; */
+
+}
+
+/* Header cells */
+.common-table thead th {
+  background-color: #fafafa;
+  font-weight: 500;
+  color: #5f6368;
+  border-bottom: 1px solid #e5e5e5;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  white-space: nowrap;
+  font-size: 13px;
+  color: black !important;
+  vertical-align: middle;
+  text-align: center;
+}
+
+/* Body cells */
+.common-table tbody td {
+  border-top: none;
+  padding-top: 10px;
+  padding-bottom: 10px;
+  white-space: nowrap;
+  font-size: 13.5px;
+  color: rgba(0, 0, 0, 0.76) !important;
+  vertical-align: middle;
+  text-align: center;
+}
+
+/* Filter icon beside checkbox */
+th .form-check-input {
+  margin: 0;
+}
+
+th .bi-funnel {
+  font-size: 13px;
+  color: #868e96;
+}
+
+/* Sort icon */
+th .bi-chevron-expand {
+  font-size: 12px;
+  color: #adb5bd;
+}
+
+/* Search icon in last header cell */
+th .bi-search {
+  font-size: 15px;
+  color: #adb5bd;
+}
+
+/* TABLE STYLES END */
+
+/* 🟡 Floating collapsed button */
+.assistant-floating-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #fff;
+  border-radius: 50px;
+  border: 2px solid transparent;
+  padding: 6px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 1050;
+  background-clip: padding-box;
+  border-image: linear-gradient(to right, #ff00cc, #3333ff);
+  border-image-slice: 1;
+}
+
+.assistant-icon-circle {
+  background: linear-gradient(45deg, #ff00cc, #3333ff);
+  border-radius: 50%;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 🔵 Popup */
+.assistant-popup {
+  bottom: 80px;
+  right: 20px;
+  width: 340px;
+  background-color: #fff;
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 1060;
+  animation: slideUp 0.25s ease;
+}
+
+.assistant-header {
+  background-color: #1e73e8;
+  border-bottom: 1px solid #ddd;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+}
+
+/* Chat button */
+.assistant-chat-btn {
+  background-color: #fff;
+  border-radius: 12px;
+  border: 1px solid #eee;
+  font-size: 14px;
+}
+
+.assistant-chat-icon {
+  background-color: #f1f3f4;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+/* Tabs */
+.assistant-tabs {
+  background-color: #fff;
+}
+
+.assistant-tab-btn {
+  border: none;
+  background: none;
+  padding: 10px 0;
+  text-align: center;
+  color: #6c757d;
+}
+
+.assistant-tab-btn.active {
+  color: #1e73e8;
+  border-top: 2px solid #1e73e8;
+}
+
+/* Animation */
+@keyframes slideUp {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Shortcut key */
+
+.shortcut-row {
+  border: none;
+  padding: 8px 6px;
+}
+
+.shortcut-row:hover {
+  background: #f3f5ff;
+}
+
+.shortcut-key {
+  /* opacity: 1; */
+  transition: 0.2s;
+  font-size: 12px;
+  color: #666;
+}

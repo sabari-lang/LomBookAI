@@ -1,0 +1,138 @@
+/* ===== Width presets (desktop) ===== */
+.sidebar-wide {
+  width: 260px;
+  transition: width .25s ease;
+}
+
+.sidebar-compact {
+  width: 80px;
+  transition: width .25s ease;
+}
+
+/* Sidebar container */
+.sidebar_block {
+  height: calc(100vh - 15vh);
+  font-size: 14px;
+  overflow: auto;
+  transition: all 0.3s ease;
+  z-index: 100;
+}
+
+/* Tablet (<=992px) */
+@media (max-width: 992px) {
+  .sidebar-wide {
+    width: 240px;
+  }
+
+  .sidebar_block {
+    font-size: 13px;
+  }
+}
+
+/* Mobile (<=768px): off-canvas drawer controlled by .active */
+@media (max-width: 768px) {
+
+  .sidebar-wide,
+  .sidebar-compact {
+    width: 80%;
+    max-width: 320px;
+  }
+
+  .sidebar_block {
+    position: fixed;
+    top: 9vh;
+    /* below navbar */
+    left: -100%;
+    height: calc(100vh - 9vh);
+    background-color: #fff;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.15);
+    z-index: 2000;
+  }
+
+  .sidebar_block.active {
+    left: 0;
+  }
+}
+
+/* Extra small (<=576px) */
+@media (max-width: 576px) {
+
+  .sidebar-wide,
+  .sidebar-compact {
+    width: 85%;
+  }
+
+  .sidebar_block {
+    font-size: 12px;
+  }
+}
+
+/* ===== Your existing visual styles (kept) ===== */
+.main-component {
+  overflow: auto;
+}
+
+/* rows */
+.sidebar-row {
+  color: #3b3f4a;
+}
+
+.sidebar-row:hover {
+  background: #eef3ff;
+}
+
+.sidebar-expanded {
+  background: #eef3ff;
+}
+
+/* active top item (blue pill) */
+.sidebar-active {
+  background: #3b82f6;
+  color: #fff !important;
+  font-weight: 600;
+}
+
+.sidebar-active svg {
+  color: #fff;
+}
+
+/* submenu links */
+.sidebar-sub {
+  color: #3b3f4a;
+}
+
+.sidebar-sub:hover {
+  color: #2563eb;
+}
+
+/* customers pill */
+.submenu-pill {
+  background: #e7f0ff;
+  color: #2563eb;
+}
+
+.submenu-pill-active {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.submenu-pill svg {
+  color: inherit;
+}
+
+/* chevron column */
+.chev-wrap {
+  width: 18px;
+  display: inline-flex;
+  justify-content: center;
+  transition: transform 0.16s ease;
+  color: #6b7280;
+}
+
+.rotate-90 {
+  transform: rotate(90deg);
+}
+
+.invisible {
+  visibility: hidden;
+}
