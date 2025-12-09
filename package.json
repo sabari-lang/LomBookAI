@@ -13,6 +13,7 @@
     "appId": "com.lom.books",
     "productName": "LOM-BOOK",
     "icon": "public/icons/lomfinance.ico",
+    "asar": true,
     "publish": [
       {
         "provider": "github",
@@ -21,15 +22,26 @@
       }
     ],
     "files": [
-      "dist/**/*",
       "electron/**/*",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist",
+        "to": "app/dist"
+      }
     ],
     "directories": {
       "buildResources": "assets"
     },
     "win": {
       "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
     }
   },
   "dependencies": {
@@ -94,8 +106,5 @@
     "tailwindcss": "^3.4.18",
     "vite": "npm:rolldown-vite@7.1.14",
     "wait-on": "^9.0.1"
-  },
-  "overrides": {
-    "vite": "npm:rolldown-vite@7.1.14"
   }
 }
