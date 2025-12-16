@@ -1,0 +1,5 @@
+export const COUNTRIES = [
+  { code: "IN", name: "India" },
+  { code: "US", name: "United States" },
+  { code: "DE", name: "Germany" },
+];
