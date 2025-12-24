@@ -14,6 +14,8 @@ import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
 import { norm, toNumberSafe, toBoolSafe, getId, safeArray } from "../../../utils/safe";
+import { notifyError } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 const ViewCustomer = () => {
   const navigate = useNavigate();
@@ -145,10 +147,11 @@ const ViewCustomer = () => {
 
   const handleDelete = async () => {
     if (selectedIds.length === 0) {
-      alert("Please select at least one customer to delete.");
+      notifyError("Please select at least one customer to delete.");
       return;
     }
-    if (!window.confirm("Are you sure you want to delete selected customers?")) return;
+    const confirmed = await confirm("Are you sure you want to delete selected customers?");
+    if (!confirmed) return;
 
     const idsToDelete = selectedIds.filter(Boolean);
     if (idsToDelete.length === 0) return;
@@ -158,7 +161,7 @@ const ViewCustomer = () => {
       setSelectedIds([]);
     } catch (error) {
       console.error("Failed to delete customers", error);
-      alert("Unable to delete selected customers. Please try again.");
+      notifyError("Unable to delete selected customers. Please try again.");
     }
   };
 

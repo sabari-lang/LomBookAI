@@ -11,6 +11,8 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 const RecurringExpense = () => {
   const navigate = useNavigate();
@@ -52,8 +54,9 @@ const RecurringExpense = () => {
   });
 
   const deleteSelected = async () => {
-    if (selected.length === 0) return alert("Select recurring expenses to delete.");
-    if (!window.confirm("Are you sure you want to delete selected recurring expenses?")) return;
+    if (selected.length === 0) return notifyInfo("Select recurring expenses to delete.");
+    const confirmed = await confirm("Are you sure you want to delete selected recurring expenses?");
+    if (!confirmed) return;
 
     try {
       await Promise.all(selected.map((id) => deleteMutation.mutateAsync(id)));

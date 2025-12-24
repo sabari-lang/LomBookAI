@@ -1,14 +1,13 @@
 import React, { useEffect, useState, useRef } from "react";
-import { useForm, Controller, useFieldArray, useWatch } from "react-hook-form";
+import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import "bootstrap/dist/css/bootstrap.min.css";
 
 import { createVendor, updateVendor } from "../api";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
-import { MOBILE_OPTIONAL, onlyDigits } from "../../../utils/validation";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
-import { getCountries, getStatesByCountry } from "../../../utils/geo";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const NewVendor = () => {
   const { state } = useLocation();
@@ -52,7 +51,7 @@ const NewVendor = () => {
     /* ADDRESS */
     billingAddress: {
       attention: "",
-      country: "IN",
+      country: "",
       addressLine1: "",
       addressLine2: "",
       city: "",
@@ -63,7 +62,7 @@ const NewVendor = () => {
     },
     shippingAddress: {
       attention: "",
-      country: "IN",
+      country: "",
       addressLine1: "",
       addressLine2: "",
       city: "",
@@ -112,15 +111,11 @@ const NewVendor = () => {
     formState: { errors },
   } = useForm({
     defaultValues: makeDefaults(),
-    mode: "onBlur",
-    reValidateMode: "onChange",
+    mode: "onChange",
   });
 
   const editId = state?.id;
   const isEditing = Boolean(editId);
-
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
 
   // Field arrays
   const {
@@ -138,15 +133,9 @@ const NewVendor = () => {
   // Active tab (default to Other Details like your screenshots)
   const [activeTab, setActiveTab] = useState("other");
 
-  // Countries & states from shared geo utils
-  const countries = getCountries();
-
-  // Watch country changes to update states dynamically
-  const billingCountry = useWatch({ control, name: "billingAddress.country" });
-  const shippingCountry = useWatch({ control, name: "shippingAddress.country" });
-
-  const billingStates = getStatesByCountry(billingCountry);
-  const shippingStates = getStatesByCountry(shippingCountry);
+  // Countries & states (simple lists for selects; replace with real lists if needed)
+  const countries = ["India", "United States", "Germany"];
+  const states = ["Tamil Nadu", "Karnataka", "California"];
 
   // Initialize/reset on mount or when state changes (populate edit mode)
   useEffect(() => {
@@ -176,29 +165,13 @@ const NewVendor = () => {
             ? state.bankDetails
             : makeDefaults().bankDetails,
       });
+      // Call refreshKeyboard after form values are populated
+      refreshKeyboard();
       return;
     }
 
     reset(makeDefaults());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId]);
-
-  // Reset state field when country changes
-  useEffect(() => {
-    if (billingCountry && billingStates.length === 0) {
-      // If selected country has no states, clear the state field
-      setValue("billingAddress.state", "", { shouldDirty: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [billingCountry]);
-
-  useEffect(() => {
-    if (shippingCountry && shippingStates.length === 0) {
-      // If selected country has no states, clear the state field
-      setValue("shippingAddress.state", "", { shouldDirty: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shippingCountry]);
+  }, [state, reset]);
 
   // Copy billing to shipping
   const copyBillingToShipping = () => {
@@ -218,7 +191,7 @@ const NewVendor = () => {
     mutationFn: (payload) => createVendor(payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["vendors"]);
-      alert("Vendor created successfully");
+      notifySuccess("Vendor created successfully");
       reset(makeDefaults());
       navigate("/vendors");
     },
@@ -229,7 +202,7 @@ const NewVendor = () => {
     mutationFn: ({ id, payload }) => updateVendor(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["vendors"]);
-      alert("Vendor updated successfully");
+      notifySuccess("Vendor updated successfully");
       navigate("/vendors");
     },
     onError: (error) => handleProvisionalError(error, "Update Vendor"),
@@ -240,7 +213,7 @@ const NewVendor = () => {
     const payload = {
       ...data,
       // Ensure openingBalance is a number or empty string
-      openingBalance: data?.openingBalance
+      openingBalance: data?.openingBalance 
         ? (typeof data.openingBalance === 'number' ? data.openingBalance : Number(data.openingBalance) || 0)
         : "",
       // Ensure boolean values
@@ -258,8 +231,8 @@ const NewVendor = () => {
     // Clean up empty string fields (except arrays that should be empty arrays)
     Object.keys(payload).forEach(key => {
       if (payload[key] === "" && key !== 'openingBalance') {
-        if (key !== 'documents' && key !== 'customFields' && key !== 'reportingTags' &&
-          key !== 'contactPersons' && key !== 'bankDetails') {
+        if (key !== 'documents' && key !== 'customFields' && key !== 'reportingTags' && 
+            key !== 'contactPersons' && key !== 'bankDetails') {
           delete payload[key];
         }
       }
@@ -277,9 +250,6 @@ const NewVendor = () => {
 
   // watch some values if necessary
   const contactPersons = watch("contactPersons");
-
-  // Declare firstInputRef using useRef
-  const firstInputRef = useRef(null);
 
   return (
     <div className="container-fluid bg-light rounded-3 pt-0 pb-3 px-4 m-0">
@@ -342,7 +312,7 @@ const NewVendor = () => {
                   render={({ field }) => (
                     <input
                       {...field}
-                      ref={firstInputRef}
+                      // ref={firstInputRef}
                       placeholder="First Name"
                       className="form-control form-control-sm"
                     />
@@ -463,20 +433,10 @@ const NewVendor = () => {
               <Controller
                 name="phoneMobile"
                 control={control}
-                rules={MOBILE_OPTIONAL}
                 render={({ field }) => (
-                  <input
-                    {...field}
-                    placeholder="Mobile"
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    onInput={onlyDigits}
-                    className={`form-control ${errors.phoneMobile ? "is-invalid" : ""}`}
-                  />
+                  <input {...field} placeholder="Mobile" className="form-control" />
                 )}
               />
-              {errors.phoneMobile && <div className="invalid-feedback d-block">{errors.phoneMobile.message}</div>}
             </div>
           </div>
         </div>
@@ -514,12 +474,12 @@ const NewVendor = () => {
           <li className="nav-item">
             <button className={`nav-link ${activeTab === "bank" ? "active" : ""}`} onClick={() => setActiveTab("bank")} type="button">Bank Details</button>
           </li>
-          {/* <li className="nav-item">
+          <li className="nav-item">
             <button className={`nav-link ${activeTab === "custom" ? "active" : ""}`} onClick={() => setActiveTab("custom")} type="button">Custom Fields</button>
           </li>
           <li className="nav-item">
             <button className={`nav-link ${activeTab === "reporting" ? "active" : ""}`} onClick={() => setActiveTab("reporting")} type="button">Reporting Tags</button>
-          </li> */}
+          </li>
           <li className="nav-item">
             <button className={`nav-link ${activeTab === "remarks" ? "active" : ""}`} onClick={() => setActiveTab("remarks")} type="button">Remarks</button>
           </li>
@@ -566,8 +526,8 @@ const NewVendor = () => {
                       render={({ field }) => (
                         <select {...field} className="form-select form-select-sm">
                           <option value="">Select</option>
-                          {getStatesByCountry("IN").map((s) => (
-                            <option key={s.code} value={s.code}>{s.name}</option>
+                          {states.map((s) => (
+                            <option key={s}>{s}</option>
                           ))}
                         </select>
                       )}
@@ -617,32 +577,17 @@ const NewVendor = () => {
                 <div className="row mb-3">
                   <label className="col-sm-2 col-form-label">Currency</label>
                   <div className="col-sm-4">
-
-
                     <Controller
                       name="currency"
                       control={control}
                       render={({ field }) => (
                         <select {...field} className="form-select form-select-sm">
-                          <option value="">-- Select Currency --</option>
-
-                          <option value="AED">AED - UAE Dirham</option>
-                          <option value="AUD">AUD - Australian Dollar</option>
-                          <option value="BND">BND - Brunei Dollar</option>
-                          <option value="CAD">CAD - Canadian Dollar</option>
-                          <option value="CNY">CNY - Yuan Renminbi</option>
-                          <option value="EUR">EUR - Euro</option>
-                          <option value="GBP">GBP - Pound Sterling</option>
-                          <option value="INR">INR - Indian Rupee</option>
-                          <option value="JPY">JPY - Japanese Yen</option>
-                          <option value="SAR">SAR - Saudi Riyal</option>
-                          <option value="USD">USD - United States Dollar</option>
-                          <option value="ZAR">ZAR - South African Rand</option>
+                          <option>INR- Indian Rupee</option>
+                          <option>USD- US Dollar</option>
+                          <option>EUR- Euro</option>
                         </select>
                       )}
                     />
-
-
                   </div>
                 </div>
 
@@ -656,9 +601,9 @@ const NewVendor = () => {
                       control={control}
                       render={({ field }) => (
                         <select {...field} className="form-select form-select-sm">
-                          {/* <option value="">Select an account</option> */}
-                          <option>Accounts Payable</option>
-
+                          <option value="">Select an account</option>
+                          <option>Accounts Payable 1</option>
+                          <option>Accounts Payable 2</option>
                         </select>
                       )}
                     />
@@ -692,10 +637,6 @@ const NewVendor = () => {
                           <option>Due on Receipt</option>
                           <option>Net 15</option>
                           <option>Net 30</option>
-                          <option>Net 45</option>
-                          <option>Net 60</option>
-                          <option>Due end of the month</option>
-                          <option>Due end of next month</option>
                         </select>
                       )}
                     />
@@ -711,25 +652,15 @@ const NewVendor = () => {
                       render={({ field }) => (
                         <select {...field} className="form-select form-select-sm">
                           <option value="">Select a Tax</option>
-                          <option value="Commission or Brokerage [2%]">Commission or Brokerage [2%]</option>
-                          <option value="Commission or Brokerage (Reduced) [3.75%]">Commission or Brokerage (Reduced) [3.75%]</option>
-                          <option value="Dividend [10%]">Dividend [10%]</option>
-                          <option value="Dividend (Reduced) [7.5%]">Dividend (Reduced) [7.5%]</option>
-                          <option value="Other Interest than securities [10%]">Other Interest than securities [10%]</option>
-                          <option value="Other Interest than securities (Reduced) [7.5%]">Other Interest than securities (Reduced) [7.5%]</option>
-                          <option value="Payment of contractors HUF/Indiv (Reduced) [0.75%]">Payment of contractors HUF/Indiv (Reduced) [0.75%]</option>
-                          <option value="Professional Fees [10%]">Professional Fees [10%]</option>
-                          <option value="Professional Fees (Reduced) [7.5%]">Professional Fees (Reduced) [7.5%]</option>
-                          <option value="Rent on land or furniture etc [10%]">Rent on land or furniture etc [10%]</option>
-                          <option value="Rent on land or furniture etc (Reduced) [7.5%]">Rent on land or furniture etc (Reduced) [7.5%]</option>
-                          <option value="Technical Fees (2%) [2%]">Technical Fees (2%) [2%]</option>
+                          <option>TDS 1</option>
+                          <option>TDS 2</option>
                         </select>
                       )}
                     />
                   </div>
                 </div>
 
-                {/* <div className="row mb-3 align-items-center">
+                <div className="row mb-3 align-items-center">
                   <label className="col-sm-2 col-form-label d-flex align-items-center gap-1">
                     Enable Portal? <i className="bi bi-info-circle text-muted small"></i>
                   </label>
@@ -751,13 +682,13 @@ const NewVendor = () => {
                       <label className="form-check-label">Allow portal access for this vendor</label>
                     </div>
                   </div>
-                </div> */}
+                </div>
                 {/* ================= ENABLE PORTAL ================= */}
 
 
                 {/* ================= DOCUMENT UPLOAD ================= */}
 
-                {/* <div className="row mb-3">
+                <div className="row mb-3">
                   <label className="col-sm-2 col-form-label fw-semibold">Documents</label>
 
                   <div className="col-sm-6">
@@ -786,7 +717,7 @@ const NewVendor = () => {
                       You can upload a maximum of 10 files, 10MB each
                     </small>
                   </div>
-                </div> */}
+                </div>
 
                 {/* ================= WEBSITE URL ================= */}
 
@@ -933,18 +864,11 @@ const NewVendor = () => {
                         name={`billingAddress.${f.key}`}
                         control={control}
                         render={({ field }) =>
-                          f.key === "country" ? (
+                          f.key === "country" || f.key === "state" ? (
                             <select {...field} className="form-select form-select-sm">
                               <option value="">Select</option>
-                              {countries.map((country) => (
-                                <option key={country.code} value={country.code}>{country.name}</option>
-                              ))}
-                            </select>
-                          ) : f.key === "state" ? (
-                            <select {...field} className={`form-select form-select-sm ${billingStates.length === 0 ? "disabled" : ""}`} disabled={billingStates.length === 0}>
-                              <option value="">Select</option>
-                              {billingStates.map((state) => (
-                                <option key={state.code} value={state.code}>{state.name}</option>
+                              {(f.key === "country" ? countries : states).map((val) => (
+                                <option key={val}>{val}</option>
                               ))}
                             </select>
                           ) : f.textarea ? (
@@ -983,18 +907,11 @@ const NewVendor = () => {
                         name={`shippingAddress.${f.key}`}
                         control={control}
                         render={({ field }) =>
-                          f.key === "country" ? (
+                          f.key === "country" || f.key === "state" ? (
                             <select {...field} className="form-select form-select-sm">
                               <option value="">Select</option>
-                              {countries.map((country) => (
-                                <option key={country.code} value={country.code}>{country.name}</option>
-                              ))}
-                            </select>
-                          ) : f.key === "state" ? (
-                            <select {...field} className={`form-select form-select-sm ${shippingStates.length === 0 ? "disabled" : ""}`} disabled={shippingStates.length === 0}>
-                              <option value="">Select</option>
-                              {shippingStates.map((state) => (
-                                <option key={state.code} value={state.code}>{state.name}</option>
+                              {(f.key === "country" ? countries : states).map((val) => (
+                                <option key={val}>{val}</option>
                               ))}
                             </select>
                           ) : f.textarea ? (
@@ -1058,26 +975,8 @@ const NewVendor = () => {
                           render={({ field }) => <input {...field} className="form-control form-control-sm" />} />
                       </td>
                       <td>
-                        <Controller
-                          name={`contactPersons.${idx}.mobile`}
-                          control={control}
-                          rules={MOBILE_OPTIONAL}
-                          render={({ field }) => (
-                            <>
-                              <input
-                                {...field}
-                                className={`form-control form-control-sm ${errors?.contactPersons?.[idx]?.mobile ? "is-invalid" : ""}`}
-                                type="tel"
-                                inputMode="numeric"
-                                maxLength={10}
-                                onInput={onlyDigits}
-                              />
-                              {errors?.contactPersons?.[idx]?.mobile && (
-                                <div className="invalid-feedback d-block">{errors.contactPersons[idx].mobile.message}</div>
-                              )}
-                            </>
-                          )}
-                        />
+                        <Controller name={`contactPersons.${idx}.mobile`} control={control}
+                          render={({ field }) => <input {...field} className="form-control form-control-sm" />} />
                       </td>
                       <td className="text-end">
                         <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => removeContact(idx)} disabled={contactFields.length === 1}>&times;</button>
@@ -1158,7 +1057,7 @@ const NewVendor = () => {
           )}
 
           {/* ========== CUSTOM FIELDS ========== */}
-          {/* {activeTab === "custom" && (
+          {activeTab === "custom" && (
             <div className="tab-pane show active">
               <Controller name="customFields" control={control}
                 render={({ field }) => (
@@ -1167,7 +1066,7 @@ const NewVendor = () => {
             </div>
           )}
 
-          ========== REPORTING TAGS ==========
+          {/* ========== REPORTING TAGS ========== */}
           {activeTab === "reporting" && (
             <div className="tab-pane show active">
               <Controller name="reportingTags" control={control}
@@ -1175,7 +1074,7 @@ const NewVendor = () => {
                   <input {...field} className="form-control form-control-sm" placeholder="Comma separated tags" />
                 )} />
             </div>
-          )} */}
+          )}
 
           {/* ========== REMARKS ========== */}
           {activeTab === "remarks" && (

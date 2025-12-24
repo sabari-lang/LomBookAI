@@ -14,6 +14,8 @@ import { deleteExpense, getExpenses } from "../api";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 const formatAmount = (value) =>
   `₹ ${Number(value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
@@ -80,8 +82,9 @@ const Expenses = () => {
   });
 
   const handleDelete = async () => {
-    if (selected.length === 0) return alert("Select expenses to delete.");
-    if (!window.confirm("Are you sure you want to delete selected expenses?")) return;
+    if (selected.length === 0) return notifyInfo("Select expenses to delete.");
+    const confirmed = await confirm("Are you sure you want to delete selected expenses?");
+    if (!confirmed) return;
 
     try {
       await Promise.all(selected.map((id) => deleteMutation.mutateAsync(id)));

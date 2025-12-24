@@ -1,11 +1,13 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useForm, Controller, useWatch } from "react-hook-form";
 import { FaSearch } from "react-icons/fa";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { handleProvisionalError } from "../../../../../../../utils/handleProvisionalError";
 import bootstrapBundle from "bootstrap/dist/js/bootstrap.bundle";
-import { createOceanInboundArrivalNotice, updateOceanInboundArrivalNotice } from "../../../oceanInboundApi";
-import { useUnlockInputs } from "../../../../../../../hooks/useUnlockInputs";
+import { createOceanInboundArrivalNotice, updateOceanInboundArrivalNotice, getOceanInboundProvisionals } from "../../../oceanInboundApi";
+import { extractItems } from "../../../../../../../utils/extractItems";
+import { refreshKeyboard } from "../../../../../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
 
 // Helper to convert empty/null/undefined to null for nullable fields (MongoDB compatibility)
 const toNullableDecimal = (v) => {
@@ -71,95 +73,165 @@ const closeModal = () => {
 
 const CreateArrivalNoticeSeaIn = ({ editData, setEditData }) => {
     // Get jobNo and hblNo from sessionStorage
-    const storedMaster = JSON.parse(sessionStorage.getItem("masterSeawayData") ?? "{}");
-    const storedHouse = JSON.parse(sessionStorage.getItem("houseSeawayData") ?? "{}");
-    
+    const storedMaster = JSON.parse(sessionStorage.getItem("masterAirwayData") ?? "{}");
+    const storedHouse = JSON.parse(sessionStorage.getItem("houseAirwayData") ?? "{}");
+
     const jobNo = storedMaster?.jobNo ?? "";
     const hblNo = storedHouse?.hbl ?? storedHouse?.hblNo ?? storedHouse?.houseNumber ?? "";
 
+
+
+
     const isEditing = Boolean(editData?._id || editData?.id);
-    
-    // ✅ Keyboard unlock hook for edit mode
-    useUnlockInputs(isEditing);
-    
-    const defaultValues = {
-        jobNo: "",
-        canNo: "",
-        canDate: "",
-        mblNo: "",
-        hblNo: "",
-        branch: "HEAD OFFICE",
 
-        shipperName: "",
-        shipperAddress: "",
 
-        blName: "",
-        blAddress: "",
+    // Fetch provisional entries to map to charges (like Air Inbound)
+    const { data: provisionalApiRaw } = useQuery({
+        queryKey: ["oceanInboundProvisionals", jobNo, hblNo],
+        queryFn: () => getOceanInboundProvisionals(jobNo, hblNo, { page: 1, pageSize: 1000 }),
+        enabled: Boolean(jobNo && hblNo),
+        staleTime: 5 * 60 * 1000,
+        retry: 1,
+    });
 
-        consigneeName: "",
-        consigneeAddress: "",
+    // Always fetch provisional charges for display (Create & Edit)
+    const mappedProvisionalCharges = useMemo(() => {
+        if (!provisionalApiRaw) return [];
+        const entries = extractItems(provisionalApiRaw) ?? [];
+        return entries.flatMap(entry => Array.isArray(entry?.items) ? entry.items : []);
+    }, [provisionalApiRaw]);
 
-        notifyName: "",
-        notifyAddress: "",
 
-        origin: "",
-        destination: "",
-        vesselName: "",
-        onBoardDate: "",
-        arrivalDate: "",
-        package: "",
-        grossWeight: "",
-        noOfContainer: "",
 
-        shipperInvoiceNo: "",
-        shipperInvoiceDate: "",
-        shipperInvoiceAmount: "",
-
-        remarks: "",
-
-        charges: [],
-    };
+    // Auto-fill default values from master and house data (like Air Inbound)
+    const autoFilledDefaults = useMemo(() => {
+        return {
+            jobNo: storedMaster?.jobNo ?? storedMaster?.job_no ?? "",
+            mblNo: storedMaster?.mblNo ?? storedMaster?.mbl_no ?? storedMaster?.mbl ?? "",
+            hblNo: storedHouse?.hbl ?? storedHouse?.hblNo ?? storedHouse?.houseNumber ?? "",
+            branch: storedMaster?.branch ?? storedHouse?.branch ?? "HEAD OFFICE",
+            shipperName: storedHouse?.shipperName ?? storedHouse?.shipper_name ?? "",
+            shipperAddress: storedHouse?.shipperAddress ?? storedHouse?.shipper_address ?? storedHouse?.shipperAddr ?? "",
+            blName: storedMaster?.blNo ?? storedMaster?.bl_name ?? "",
+            blAddress: storedMaster?.blText ?? storedMaster?.bl_address ?? "",
+            consigneeName: storedHouse?.consigneeName ?? storedHouse?.consignee_name ?? "",
+            consigneeAddress: storedHouse?.consigneeAddress ?? storedHouse?.consignee_address ?? storedHouse?.consigneeAddr ?? "",
+            notifyName: storedHouse?.notifyName ?? storedHouse?.notify_name ?? "",
+            notifyAddress: storedHouse?.notifyAddress ?? storedHouse?.notify_address ?? storedHouse?.notifyAddr ?? "",
+            origin: storedMaster?.originPort ?? storedMaster?.origin ?? storedHouse?.origin ?? "",
+            destination: storedMaster?.finalDestination ?? storedMaster?.destination ?? storedHouse?.destination ?? "",
+            vesselName: storedMaster?.vesselName ?? storedMaster?.vessel_name ?? storedHouse?.vesselName ?? "",
+            onBoardDate: formatDateForInput(storedMaster?.onBoardDate ?? storedMaster?.on_board_date ?? storedHouse?.onBoardDate),
+            arrivalDate: formatDateForInput(storedMaster?.arrivalDate ?? storedMaster?.arrival_date ?? storedHouse?.arrivalDate),
+            package: storedMaster?.package ?? storedHouse?.package ?? "",
+            grossWeight: storedMaster?.grossWeight ?? storedMaster?.gross_weight ?? storedHouse?.grossWeight ?? "",
+            noOfContainer: storedMaster?.containers?.length ?? storedHouse?.noOfContainer ?? "",
+            shipperInvoiceNo: storedHouse?.shipperInvoiceNo ?? storedHouse?.shipper_invoice_no ?? "",
+            shipperInvoiceDate: formatDateForInput(storedHouse?.shipperInvoiceDate ?? storedHouse?.shipper_invoice_date),
+            shipperInvoiceAmount: storedHouse?.shipperInvoiceAmount ?? storedHouse?.shipper_invoice_amount ?? "",
+            canNo: "",
+            canDate: "",
+            remarks: "",
+            charges: null,
+        };
+    }, [storedMaster, storedHouse]);
 
     const queryClient = useQueryClient();
 
-    const { control, handleSubmit, reset } = useForm({
-        defaultValues: isEditing ? (editData || defaultValues) : defaultValues,
+    const { control, handleSubmit, reset, setValue } = useForm({
+        defaultValues: isEditing ? (editData || autoFilledDefaults) : autoFilledDefaults,
     });
 
-    // Watch charges (display only) and compute totals
-    const charges = useWatch({ control, name: "charges" }) || [];
-    const { subtotal, totalAmount } = useMemo(() => {
-        const sub = safeArr(charges).reduce(
-            (sum, r) => sum + Number(r?.amountInInr ?? r?.amountInINR ?? 0),
-            0
-        );
-        const grand = safeArr(charges).reduce((sum, r) => sum + Number(r?.total ?? 0), 0);
-        return { subtotal: sub, totalAmount: grand };
-    }, [charges]);
+    // For display: prefer saved charges in edit, else provisional
+    const watchedCharges = useWatch({ control, name: "charges" }) || [];
+    const displayCharges = useMemo(() => {
+        // Edit: prefer saved charges if present, else fallback to provisional
+        if (isEditing) {
+            if (watchedCharges && watchedCharges.length > 0) return watchedCharges;
+            if (mappedProvisionalCharges.length > 0) return mappedProvisionalCharges;
+            return [];
+        }
+        // Create: always show provisional
+        return mappedProvisionalCharges.length > 0 ? mappedProvisionalCharges : [];
+    }, [isEditing, watchedCharges, mappedProvisionalCharges]);
+    // For backend: single decimal/null value for charges
+    const chargesValue = displayCharges.length > 0
+        ? displayCharges.reduce((sum, r) => sum + (typeof r?.total === 'number' ? r.total : Number(r?.total) || 0), 0)
+        : null;
 
-    // Reset form when editData changes
+
+
+    // --- Initialization logic (like Air Inbound) ---
+    const initializedRef = useRef(false);
+    const lastEditIdRef = useRef(null);
+
+    // Helper: deep compare arrays of charges (shallow for this use case)
+    const areChargesEqual = (a, b) => {
+        if (!Array.isArray(a) || !Array.isArray(b)) return false;
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) return false;
+        }
+        return true;
+    };
+
+    // Auto-fill form when editData changes (for editing mode)
     useEffect(() => {
-        if (editData?.id) {
+        const currentEditId = editData?._id || editData?.id;
+        if (isEditing && editData && currentEditId !== lastEditIdRef.current) {
             reset({
-                ...defaultValues,
+                ...autoFilledDefaults,
                 ...editData,
-                canDate: formatDateForInput(editData?.canDate),
                 onBoardDate: formatDateForInput(editData?.onBoardDate),
                 arrivalDate: formatDateForInput(editData?.arrivalDate),
                 shipperInvoiceDate: formatDateForInput(editData?.shipperInvoiceDate),
-                charges: safeArr(editData?.charges),
+                charges: Array.isArray(editData?.charges) && editData.charges.length > 0
+                    ? editData.charges
+                    : mappedProvisionalCharges,
             });
-        } else if (!editData) {
-            reset(defaultValues);
+            // Call refreshKeyboard after form values are populated
+            refreshKeyboard();
+            lastEditIdRef.current = currentEditId;
+            initializedRef.current = true;
         }
-    }, [editData?.id]);
+    // Only depend on editData id and isEditing, not on mappedProvisionalCharges (which is stable via useMemo)
+    }, [isEditing, editData?._id, editData?.id, autoFilledDefaults, editData]);
+
+    // Initialize form for create mode (run once)
+    useEffect(() => {
+        if (!isEditing && !initializedRef.current) {
+            reset({
+                ...autoFilledDefaults,
+                charges: mappedProvisionalCharges,
+            });
+            initializedRef.current = true;
+        }
+    }, [isEditing, autoFilledDefaults, mappedProvisionalCharges]);
+
+    // Watch for changes in mappedProvisionalCharges and update form (create mode only)
+    useEffect(() => {
+        if (!isEditing && initializedRef.current) {
+            // Only update if charges actually changed
+            if (!areChargesEqual(watchedCharges, mappedProvisionalCharges)) {
+                setValue("charges", mappedProvisionalCharges, { shouldDirty: false });
+            }
+        }
+    }, [mappedProvisionalCharges, isEditing, setValue, watchedCharges]);
+
+    // Reset initialization flag when editData is cleared
+    useEffect(() => {
+        if (!editData && !isEditing) {
+            initializedRef.current = false;
+            lastEditIdRef.current = null;
+        }
+    }, [editData, isEditing]);
 
     // Create mutation
     const createMutation = useMutation({
         mutationFn: (payload) => createOceanInboundArrivalNotice(jobNo, hblNo, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["oceanInboundArrivalNotice", jobNo, hblNo] });
-            alert("Arrival Notice Created");
+            notifySuccess("Arrival Notice Created");
             setEditData?.(null);
             closeModal();
         },
@@ -171,7 +243,7 @@ const CreateArrivalNoticeSeaIn = ({ editData, setEditData }) => {
         mutationFn: (payload) => updateOceanInboundArrivalNotice(jobNo, hblNo, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["oceanInboundArrivalNotice", jobNo, hblNo] });
-            alert("Arrival Notice Updated");
+            notifySuccess("Arrival Notice Updated");
             setEditData?.(null);
             closeModal();
         },
@@ -180,11 +252,11 @@ const CreateArrivalNoticeSeaIn = ({ editData, setEditData }) => {
 
     const onSubmit = (values) => {
         if (!jobNo || !hblNo) {
-            alert("Job No and HBL No are required");
+            notifyError("Job No and HBL No are required");
             return;
         }
 
-        // Normalize all fields per backend DTO
+        // Normalize all fields per backend DTO, but send only a single decimal/null for charges
         const normalized = {
             canNo: toNullableString(values.canNo),
             canDate: values.canDate || null,
@@ -218,9 +290,7 @@ const CreateArrivalNoticeSeaIn = ({ editData, setEditData }) => {
 
             remarks: toNullableString(values.remarks),
 
-            subtotal: toNullableDecimal(subtotal),
-            charges: safeArr(values.charges),
-            totalAmount: toNullableDecimal(totalAmount),
+            charges: chargesValue,
         };
 
         if (isEditing) {
@@ -450,14 +520,14 @@ const CreateArrivalNoticeSeaIn = ({ editData, setEditData }) => {
                                     </thead>
 
                                     <tbody>
-                                        {charges.length === 0 ? (
+                                        {displayCharges.length === 0 ? (
                                             <tr>
                                                 <td colSpan="11" className="text-center text-muted">
                                                     No charges added
                                                 </td>
                                             </tr>
                                         ) : (
-                                            charges.map((r, idx) => (
+                                            displayCharges.map((r, idx) => (
                                                 <tr key={r?.id ?? idx}>
                                                     <td></td>
                                                     <td>{r?.description ?? ""}</td>
@@ -474,27 +544,16 @@ const CreateArrivalNoticeSeaIn = ({ editData, setEditData }) => {
                                             ))
                                         )}
 
-                                        <tr>
-                                            <td colSpan="5"></td>
-                                            <td className="text-end fw-bold">Subtotal</td>
-                                            <td className="fw-bold text-end" colSpan="2">{toNullableDecimal(subtotal) ?? 0}</td>
-                                            <td colSpan="3"></td>
-                                        </tr>
-                                        <tr>
-                                            <td colSpan="5"></td>
-                                            <td className="text-end fw-bold">Total</td>
-                                            <td className="fw-bold text-end" colSpan="2">{toNullableDecimal(totalAmount) ?? 0}</td>
-                                            <td colSpan="3"></td>
-                                        </tr>
+                                        {/* Subtotal/Total rows removed as not required by API */}
                                     </tbody>
                                 </table>
                             </div>
 
                             {/* FOOTER */}
                             <div className="modal-footer mt-3">
-                                <button 
-                                    type="button" 
-                                    className="btn btn-secondary" 
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
                                     data-bs-dismiss="modal"
                                     onClick={() => {
                                         setEditData?.(null);
@@ -503,15 +562,15 @@ const CreateArrivalNoticeSeaIn = ({ editData, setEditData }) => {
                                 >
                                     Cancel
                                 </button>
-                                <button 
-                                    type="submit" 
+                                <button
+                                    type="submit"
                                     className="btn btn-primary"
                                     disabled={createMutation.isPending || updateMutation.isPending}
                                 >
-                                    {createMutation.isPending || updateMutation.isPending 
-                                        ? "Saving..." 
-                                        : isEditing 
-                                            ? "Update" 
+                                    {createMutation.isPending || updateMutation.isPending
+                                        ? "Saving..."
+                                        : isEditing
+                                            ? "Update"
                                             : "Save"}
                                 </button>
                             </div>

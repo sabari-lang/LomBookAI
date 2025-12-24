@@ -14,6 +14,7 @@ import { deleteAirInboundJob, getAirInboundJobs } from "./Api";
 import Pagination from "../../../common/pagination/Pagination";
 import { extractItems } from "../../../../utils/extractItems";
 import { extractPagination } from "../../../../utils/extractPagination";
+import { confirm } from "../../../../utils/confirm";
 
 const AirInboundComp = () => {
     const navigate = useNavigate();
@@ -21,19 +22,9 @@ const AirInboundComp = () => {
     const [entriesPerPage, setEntriesPerPage] = useState(10);
     const [search, setSearch] = useState("");
     const [currentPage, setCurrentPage] = useState(1);
-    const [showJobModal, setShowJobModal] = useState(false);
-    const [selectedBL, setSelectedBL] = useState(null);
+    const [editData, setEditData] = useState(null);
     const [deletingJobKey, setDeletingJobKey] = useState(null);
     const queryClient = useQueryClient();
-
-    // Check if modal should be opened from InvoiceAgent
-    useEffect(() => {
-        const shouldOpen = sessionStorage.getItem("openJobCreationModal");
-        if (shouldOpen === "air-inbound") {
-            setShowJobModal(true);
-            sessionStorage.removeItem("openJobCreationModal");
-        }
-    }, []);
 
     const deleteMutation = useMutation({
         mutationFn: deleteAirInboundJob,
@@ -45,10 +36,11 @@ const AirInboundComp = () => {
         },
     });
 
-    const handleDelete = (row = {}) => {
+    const handleDelete = async (row = {}) => {
         const jobNo = row.jobNo;
         if (!jobNo) return;
-        if (!window.confirm(`Delete Air Inbound job ${jobNo}?`)) {
+        const confirmed = await confirm(`Delete Air Inbound job ${jobNo}?`);
+        if (!confirmed) {
             return;
         }
 
@@ -105,14 +97,12 @@ const AirInboundComp = () => {
     }, [allItems, search]);
 
     // -----------------------------
-    // ⭐ PAGINATION FALLBACK
+    // ⭐ PAGINATION - Use server-side pagination only
+    // Remove client-side slice when using server pagination
     // -----------------------------
-    const paginated = allItems.slice(
-        (safePage - 1) * entriesPerPage,
-        safePage * entriesPerPage
-    );
-
-    const rowsToRender = search ? filtered : paginated;
+    // If API returns paginated data, use it directly
+    // Otherwise, fall back to client-side pagination for search results only
+    const rowsToRender = search ? filtered : allItems;
 
     const handlePageChange = (page) => {
         if (!page) return;
@@ -130,7 +120,8 @@ const AirInboundComp = () => {
 
                     <button
                         className="btn btn-success btn-sm"
-                        onClick={() => setShowJobModal(true)}
+                        data-bs-toggle="modal"
+                        data-bs-target="#createInboundJobcreationModal"
                     >
                         <i className="fa fa-plus me-1"></i>
                         Create Job
@@ -249,9 +240,10 @@ const AirInboundComp = () => {
                                             <td>
                                                 <button
                                                     className="btn btn-sm btn-success me-1"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#createInboundJobcreationModal"
                                                     onClick={() => {
                                                         setSelectedBL(row);
-                                                        setShowJobModal(true);
                                                     }}
                                                 >
                                                     <FontAwesomeIcon icon={faPenToSquare} />
@@ -305,17 +297,8 @@ const AirInboundComp = () => {
                 </div>
             </div>
                                     
-            {/* EDIT / CREATE JOB MODAL */}
-            {showJobModal && (
-                <JobCreation
-                    onClose={() => {
-                        setShowJobModal(false);
-                        setSelectedBL(null);
-                    }}
-                    editData={selectedBL}
-                    setEditData={setSelectedBL}
-                />
-            )}
+            <JobCreation editData={editData ?? {}}
+                setEditData={setEditData} />
         </>
     );
 };

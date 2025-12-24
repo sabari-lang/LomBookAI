@@ -4,6 +4,7 @@ import DataTable from "react-data-table-component";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 
 const SalesSummaryByHsn = () => {
@@ -107,7 +108,7 @@ const SalesSummaryByHsn = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Error generating PDF");
+            notifyError("Error generating PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);

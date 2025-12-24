@@ -17,6 +17,8 @@ import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import Popup from "../../common/popup/Popup";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 
 const ViewInvoice = () => {
@@ -93,10 +95,11 @@ const ViewInvoice = () => {
 
   const handleDelete = async () => {
     if (selectedIds.length === 0) {
-      alert("Please select at least one invoice to delete.");
+      notifyInfo("Please select at least one invoice to delete.");
       return;
     }
-    if (!window.confirm("Are you sure you want to delete selected invoices?")) return;
+    const confirmed = await confirm("Are you sure you want to delete selected invoices?");
+    if (!confirmed) return;
 
     try {
       await Promise.all(selectedIds.map((id) => deleteMutation.mutateAsync(id)));
@@ -378,7 +381,8 @@ const ViewInvoice = () => {
             className="btn btn-sm btn-outline-danger"
             onClick={async (e) => {
               e.stopPropagation();
-              if (!window.confirm("Are you sure you want to delete this invoice?")) return;
+              const confirmed = await confirm("Are you sure you want to delete this invoice?");
+    if (!confirmed) return;
               try {
                 await deleteMutation.mutateAsync(row.id);
               } catch (err) {

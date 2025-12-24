@@ -6,7 +6,8 @@ import { createExpense, updateExpense, getVendors } from "../api";
 import { getCustomers } from "../../sales/api";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { extractItems } from "../../../utils/extractItems";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const makeExpenseDefaults = () => ({
   date: new Date().toISOString().split("T")[0],
@@ -92,13 +93,9 @@ const NewExpenses = () => {
   const isNewFromSource = state?.isNew === true; // conversion flag from source
   const isEditing = Boolean(editId) && !isNewFromSource;
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
-
   const { control, handleSubmit, watch, reset, register, setValue, formState: { errors } } = useForm({
     defaultValues: makeExpenseDefaults(),
-    mode: "onBlur",
-    reValidateMode: "onChange",
+    mode: "onChange",
   });
 
   const expenseType = watch("expenseType");
@@ -158,21 +155,22 @@ const NewExpenses = () => {
         setUploadedFiles(normalized.files);
         setValue("files", normalized.files);
       }
+      // Call refreshKeyboard after form values are populated
+      refreshKeyboard();
       return;
     }
 
     reset(makeExpenseDefaults());
     setUploadedFiles([]);
     setValue("files", []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId]);
+  }, [state, reset, setValue, isNewFromSource]);
 
   // File upload handlers
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files || []);
     const validFiles = files.filter((f) => f.size <= 10 * 1024 * 1024); // 10MB limit
     if (validFiles.length < files.length) {
-      alert("Some files exceed 10MB limit and were not added.");
+      notifyInfo("Some files exceed 10MB limit and were not added.");
     }
     const fileObjects = validFiles.map((file) => ({
       name: file.name,
@@ -192,7 +190,7 @@ const NewExpenses = () => {
     const files = Array.from(e.dataTransfer?.files || []);
     const validFiles = files.filter((f) => f.size <= 10 * 1024 * 1024);
     if (validFiles.length < files.length) {
-      alert("Some files exceed 10MB limit and were not added.");
+      notifyInfo("Some files exceed 10MB limit and were not added.");
     }
     const fileObjects = validFiles.map((file) => ({
       name: file.name,
@@ -233,7 +231,7 @@ const NewExpenses = () => {
     mutationFn: (payload) => createExpense(payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["expenses"]);
-      alert("Expense created successfully");
+      notifySuccess("Expense created successfully");
       reset(makeExpenseDefaults());
       setUploadedFiles([]);
       setValue("files", []);
@@ -247,7 +245,7 @@ const NewExpenses = () => {
     mutationFn: ({ id, payload }) => updateExpense(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["expenses"]);
-      alert("Expense updated successfully");
+      notifySuccess("Expense updated successfully");
       navigate("/expenses");
     },
     onError: (error) => handleProvisionalError(error, "Update Expense"),

@@ -4,7 +4,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createRecurringExpense, updateRecurringExpense } from "../api";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const NewRecurringExpense = () => {
   const { state } = useLocation();
@@ -13,9 +14,6 @@ const NewRecurringExpense = () => {
 
   const editId = state?.id;
   const isEditing = Boolean(editId);
-
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
 
   const { control, handleSubmit, watch, reset } = useForm({
     defaultValues: {
@@ -62,6 +60,8 @@ const NewRecurringExpense = () => {
   useEffect(() => {
     if (state) {
       reset({ ...state });
+      // Call refreshKeyboard after form values are populated
+      refreshKeyboard();
       return;
     }
     reset({
@@ -107,7 +107,7 @@ const NewRecurringExpense = () => {
     mutationFn: (payload) => createRecurringExpense(payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["recurringExpenses"]);
-      alert("Recurring expense created successfully");
+      notifySuccess("Recurring expense created successfully");
       navigate("/recurringexpenses");
     },
     onError: (error) => handleProvisionalError(error, "Create Recurring Expense"),
@@ -117,7 +117,7 @@ const NewRecurringExpense = () => {
     mutationFn: ({ id, payload }) => updateRecurringExpense(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["recurringExpenses"]);
-      alert("Recurring expense updated successfully");
+      notifySuccess("Recurring expense updated successfully");
       navigate("/recurringexpenses");
     },
     onError: (error) => handleProvisionalError(error, "Update Recurring Expense"),

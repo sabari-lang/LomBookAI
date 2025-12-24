@@ -14,6 +14,8 @@ import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 
 const ViewSalesOrder = () => {
@@ -85,10 +87,10 @@ const ViewSalesOrder = () => {
 
   const handleDelete = async () => {
     if (selectedRows.length === 0)
-      return alert("Please select at least one record to delete.");
+      return notifyInfo("Please select at least one record to delete.");
 
-    if (!window.confirm("Are you sure you want to delete selected Sales Orders?"))
-      return;
+    const confirmed = await confirm("Are you sure you want to delete selected Sales Orders?");
+    if (!confirmed) return;
 
     try {
       await Promise.all(

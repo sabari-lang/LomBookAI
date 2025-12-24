@@ -15,6 +15,8 @@ import VendorSearch from "../../../../../../common/popup/VendorSearch";
  // adjust path to your api file
 import { handleProvisionalError } from "../../../../../../../utils/handleProvisionalError";
 import { createOceanInboundVendorAccount, updateOceanInboundVendorAccount } from "../../../oceanInboundApi";
+import { refreshKeyboard } from "../../../../../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
 
 // --------------------------
 // Safe helpers
@@ -57,6 +59,8 @@ const sampleRow = () => ({
 });
 
 const RaisingEntryVendorSeaIn = ({ editData, setEditData }) => {
+    const isEditing = Boolean(editData?.id || editData?._id);
+    
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [open, setOpen] = useState(false);
@@ -72,8 +76,6 @@ const RaisingEntryVendorSeaIn = ({ editData, setEditData }) => {
         safeStr(storedHouse?.hblNo) ||
         safeStr(storedHouse?.houseNumber);
     const mawbNo = safeStr(storedHouse?.mawb);
-
-    const isEditing = Boolean(editData?.id || editData?._id);
 
     // --------------------------
     // Default values
@@ -109,7 +111,7 @@ const RaisingEntryVendorSeaIn = ({ editData, setEditData }) => {
         control,
         name: "items",
     });
-
+    
     // watch items for auto calc
     const watchedItems = useWatch({ control, name: "items" }) || [];
 
@@ -233,6 +235,8 @@ const RaisingEntryVendorSeaIn = ({ editData, setEditData }) => {
 
             items: safeItems,
         });
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isEditing]);
 
@@ -251,7 +255,7 @@ const RaisingEntryVendorSeaIn = ({ editData, setEditData }) => {
         onError: (err) => handleProvisionalError(err, "Create Ocean Inbound Vendor"),
         onSuccess: () => {
             queryClient.invalidateQueries(["oceanInboundVendor"]);
-            alert("Vendor Accounting Entry Created Successfully");
+            notifySuccess("Vendor Accounting Entry Created Successfully");
 
             // reset, clear edit state, close modal
             reset(defaultValues);
@@ -291,7 +295,7 @@ const RaisingEntryVendorSeaIn = ({ editData, setEditData }) => {
         onError: (err) => handleProvisionalError(err, "Update Ocean Inbound Vendor"),
         onSuccess: () => {
             queryClient.invalidateQueries(["oceanInboundVendor"]);
-            alert("Vendor Accounting Entry Updated Successfully");
+            notifySuccess("Vendor Accounting Entry Updated Successfully");
 
             reset(defaultValues);
             setEditData(null);

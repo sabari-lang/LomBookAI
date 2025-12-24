@@ -2,37 +2,56 @@
 
 
 import React, { useEffect } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import Navbar from "../navbar/Navbar";
 import Sidebar from "../sidebar/Sidebar";
 import Footer from "../footer/Footer";
+import { useAppBack } from "../../../hooks/useAppBack";
+import { cleanupBackdrops } from "../../../utils/modalManager";
 
 const Layout = () => {
 
   const location = useLocation();
-  const navigate = useNavigate();
+  const { goBack, isAtRoot } = useAppBack();
 
+  // Single global ESC handler for back navigation
   useEffect(() => {
     const handleEsc = (e) => {
-      const tag = e.target.tagName.toLowerCase();
+      if (e.key !== "Escape") return;
 
-      // CRITICAL: Allow normal typing in input fields
-      // Don't navigate back when user is typing (could lose unsaved input)
-      if (tag === "input" || tag === "textarea" || e.target.isContentEditable) {
+      // Don't navigate if at root
+      if (isAtRoot) return;
+
+      const activeEl = document.activeElement;
+      const tag = activeEl?.tagName?.toLowerCase();
+
+      // Don't navigate when user is typing in input fields
+      if (tag === "input" || tag === "textarea" || tag === "select" || activeEl?.isContentEditable) {
         return;
       }
 
-      if (e.key === "Escape") {
-        navigate(-1);
-      }
+      // Don't navigate if any modal/dialog/drawer is open
+      const hasOverlay = document.querySelector(
+        ".modal.show, [role='dialog']:not([aria-hidden='true']), [aria-modal='true'], .MuiDialog-root, .MuiDrawer-root, .ant-modal-wrap:not(.ant-modal-wrap-hidden), .ant-drawer-open"
+      );
+      if (hasOverlay) return;
+
+      // Safe to navigate back with smart fallback (debounce built into goBack)
+      goBack();
     };
+
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
-  }, [navigate]);
+  }, [goBack, isAtRoot]);
+
+  // On every route change ensure stale backdrops/scroll are cleared
+  useEffect(() => {
+    cleanupBackdrops();
+    return () => cleanupBackdrops();
+  }, [location.pathname]);
 
 
 
-  const isCompact = location.pathname.startsWith("/reports");
   const hideSidebar = location.pathname.startsWith("/import-parties"); // 👈 Hide sidebar on ImportParties
 
   return (
@@ -42,10 +61,10 @@ const Layout = () => {
 
       {/* ===== SIDEBAR + MAIN CONTENT ===== */}
       <div className="row g-0">
-        {/* Conditionally render Sidebar */}
+        {/* Sidebar - handles both desktop and mobile internally */}
         {!hideSidebar && (
-          <aside className={`col-auto ${isCompact ? "sidebar-compact" : "sidebar-wide"}`}>
-            <Sidebar isCompact={isCompact} />
+          <aside className="col-auto sidebar-wrapper">
+            <Sidebar />
           </aside>
         )}
 
@@ -53,10 +72,14 @@ const Layout = () => {
         <main
           className={`${hideSidebar ? "col-12" : "col"} m-0`}
           style={{
-            height: "calc(100vh - 12vh)",
+            height: "calc(100vh - 6vh)",
             overflow: "auto",
             scrollbarWidth: "thin",
-            backgroundColor: "#f9fafc",
+            // backgroundColor: "#f9fafc",
+            // background: "linear-gradient(to bottom, #A9D4E9 0%, #F8FAFC 100%)",
+            // background: "linear-gradient(to bottom, #A9D4E9 0%, #F8FAFC 100%)",
+            background: "linear-gradient(to bottom, #A9D4E9 0%, #F8FAFC 100%)",
+
             transition: "all 0.3s ease",
           }}
         >
@@ -64,7 +87,8 @@ const Layout = () => {
         </main>
 
       </div>
-      <Footer />
+      {/* ===== FOOTER ===== */}
+      
     </div>
   );
 };

@@ -11,13 +11,12 @@ import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 
-const fallbackRows = [
-    { id: 1, name: "Hp-laptop", qty: 1, amount: 23600, status: "Open Orders" },
-    { id: 2, name: "Dell Monitor", qty: 2, amount: 31000, status: "Partial Open Orders" },
-    { id: 3, name: "USB Keyboard", qty: 5, amount: 1500, status: "Close Orders" },
-];
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const SaleOrderItem = () => {
+    // Report filter form - always unlock on mount
+    
+    
     const form = useForm({
         defaultValues: {
             fromDate: "2025-10-01",
@@ -67,7 +66,7 @@ const SaleOrderItem = () => {
 
     const apiRows = extractItems(fetched);
     const pagination = extractPagination(fetched);
-    const tableRows = apiRows.length > 0 ? apiRows : fallbackRows;
+    const tableRows = apiRows;
     const totalRows = Number.isFinite(pagination.totalCount) ? pagination.totalCount : tableRows.length;
 
     const filteredRows = useMemo(() => {
@@ -174,7 +173,7 @@ const SaleOrderItem = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to generate PDF");
+            notifyError("Failed to generate PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);
@@ -194,7 +193,7 @@ const SaleOrderItem = () => {
             link.download = `SaleOrderItems_${fromDate}_${toDate}.pdf`;
             link.click();
         }
-        if (action === "email") alert("Email feature coming soon");
+        if (action === "email") notifyInfo("Email feature coming soon");
     };
 
     const columns = [

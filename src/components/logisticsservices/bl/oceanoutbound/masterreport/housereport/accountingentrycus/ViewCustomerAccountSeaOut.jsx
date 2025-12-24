@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getOceanOutboundCustomerAccountById } from "../../../oceanOutboundApi";
 import moment from "moment";
@@ -7,9 +6,11 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 import PdfPreviewModal from "../../../../../../common/popup/PdfPreviewModal";
 import html2canvas from "html2canvas";
+import { useAppBack } from "../../../../../../../hooks/useAppBack";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
 
 const ViewCustomerAccountSeaOut = () => {
-    const navigate = useNavigate();
+    const { goBack } = useAppBack();
     const [entryData, setEntryData] = useState(null);
     const [masterData, setMasterData] = useState(null);
     const [houseData, setHouseData] = useState(null);
@@ -70,7 +71,7 @@ const ViewCustomerAccountSeaOut = () => {
     // Generate and download PDF for Export Invoice - Matching Export Invoice SEZ format
     const handlePrintExportInvoice = () => {
         if (!displayData) {
-            alert("Entry data not found");
+            notifyError("Entry data not found");
             return;
         }
 
@@ -246,7 +247,7 @@ const ViewCustomerAccountSeaOut = () => {
     // Print Digitally Signed
     const handlePrintDigitallySigned = () => {
         if (!displayData?.id) {
-            alert("Entry ID not found");
+            notifyError("Entry ID not found");
             return;
         }
         const baseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
@@ -315,7 +316,7 @@ const ViewCustomerAccountSeaOut = () => {
             <div className="container p-4 text-center">
                 <h5>No Entry Selected</h5>
                 <p className="text-muted">Please select an entry from the list to view its details.</p>
-                <button className="btn btn-primary mt-3" onClick={() => navigate(-1)}>
+                <button className="btn btn-primary mt-3" onClick={() => goBack()}>
                     Go Back
                 </button>
             </div>
@@ -838,7 +839,14 @@ const ViewCustomerAccountSeaOut = () => {
                 show={showPreview}
                 pdfUrl={pdfUrl}
                 title="Export Invoice"
-                onClose={() => setShowPreview(false)}
+                onClose={() => {
+                    setShowPreview(false);
+                    // Revoke ObjectURL to prevent memory leaks
+                    if (pdfUrl) {
+                        URL.revokeObjectURL(pdfUrl);
+                        setPdfUrl(null);
+                    }
+                }}
                 onAction={handlePdfAction}
             />
         </div>

@@ -9,13 +9,28 @@
   transition: width .25s ease;
 }
 
+/* ===== CSS Variables for Sidebar Theme ===== */
+:root {
+  /* --sidebar-bg: #2e3545; */
+  --sidebar-bg: #171a21;
+  --sidebar-text: #e5e7eb;
+  --sidebar-text-submenu: #d1d5db;
+  --sidebar-icon: #a0aec0;
+  --sidebar-icon-active: #ffffff;
+  --sidebar-hover: #3a4254;
+  --sidebar-active: #1d4ed8;
+  --sidebar-border: #3a4254;
+}
+
 /* Sidebar container */
 .sidebar_block {
-  height: calc(100vh - 15vh);
+  height: calc(100vh - 6vh);
   font-size: 14px;
   overflow: auto;
-  transition: all 0.3s ease;
+  transition: width 0.3s ease, min-width 0.3s ease;
   z-index: 100;
+  background-color: var(--sidebar-bg) !important;
+  color: var(--sidebar-text);
 }
 
 /* Tablet (<=992px) */
@@ -44,7 +59,7 @@
     /* below navbar */
     left: -100%;
     height: calc(100vh - 9vh);
-    background-color: #fff;
+    background-color: var(--sidebar-bg);
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.15);
     z-index: 2000;
   }
@@ -135,4 +150,221 @@
 
 .invisible {
   visibility: hidden;
+}
+
+/* ============================================
+   DESKTOP COLLAPSED MODE (.sidebar--collapsed)
+   Icon-only sidebar with tooltips on hover
+   ============================================ */
+
+/* Collapsed sidebar width */
+.sidebar_block.sidebar--collapsed {
+  width: 64px;
+  min-width: 64px;
+  overflow-x: hidden;
+}
+
+/* Ensure expanded width when not collapsed */
+.sidebar_block:not(.sidebar--collapsed) {
+  width: 260px;
+  min-width: 260px;
+}
+
+/* Hide labels in collapsed mode */
+.sidebar_block.sidebar--collapsed .nav-label {
+  display: none;
+}
+
+/* Center icons in collapsed mode */
+.sidebar_block.sidebar--collapsed .nav-link {
+  justify-content: center;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Hide submenus in collapsed mode */
+.sidebar_block.sidebar--collapsed .collapse {
+  display: none !important;
+}
+
+/* Adjust footer in collapsed mode */
+.sidebar_block.sidebar--collapsed .mt-auto {
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+}
+
+/* ============================================
+   MOBILE OFFCANVAS IMPROVEMENTS
+   ============================================ */
+
+/* Ensure mobile sidebar is full height and slides smoothly */
+@media (max-width: 991.98px) {
+  .sidebar_block {
+    position: fixed;
+    top: 0;
+    left: -100%;
+    width: 280px;
+    max-width: 85vw;
+    height: 100vh;
+    background-color: #fff;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.15);
+    z-index: 2000;
+    transition: left 0.3s ease;
+    overflow-y: auto;
+  }
+
+  .sidebar_block.active {
+    left: 0;
+  }
+
+  /* Add padding at top for mobile toggle button */
+  .sidebar_block.active .nav {
+    padding-top: 50px;
+  }
+
+  /* Ensure collapsed mode doesn't apply on mobile when sidebar is open */
+  .sidebar_block.active.sidebar--collapsed {
+    width: 280px;
+    min-width: 280px;
+  }
+
+  .sidebar_block.active.sidebar--collapsed .nav-label {
+    display: inline;
+  }
+
+  .sidebar_block.active.sidebar--collapsed .nav-link {
+    justify-content: flex-start;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .sidebar_block.active.sidebar--collapsed .collapse {
+    display: block !important;
+  }
+}
+
+/* Desktop: show sidebar normally */
+@media (min-width: 992px) {
+  .sidebar_block {
+    position: relative;
+    width: 260px;
+    background-color: var(--sidebar-bg);
+  }
+}
+
+/* ===== Dark Theme Styling ===== */
+.sidebar_block .nav-link {
+  color: var(--sidebar-text) !important;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.sidebar_block .nav-link:hover {
+  background-color: var(--sidebar-hover) !important;
+  color: var(--sidebar-text) !important;
+}
+
+.sidebar_block .nav-link.bg-primary,
+.sidebar_block .nav-link.active {
+  background-color: var(--sidebar-active) !important;
+  color: var(--sidebar-icon-active) !important;
+  font-weight: 600;
+}
+
+.sidebar_block .nav-link svg,
+.sidebar_block .nav-link .fa-icon {
+  color: var(--sidebar-icon);
+  transition: color 0.2s ease;
+}
+
+.sidebar_block .nav-link.bg-primary svg,
+.sidebar_block .nav-link.active svg,
+.sidebar_block .nav-link.bg-primary .fa-icon,
+.sidebar_block .nav-link.active .fa-icon {
+  color: var(--sidebar-icon-active) !important;
+}
+
+/* Submenu items */
+.sidebar_block .list-unstyled .d-flex {
+  color: var(--sidebar-text-submenu);
+}
+
+.sidebar_block .list-unstyled .d-flex:hover {
+  background-color: var(--sidebar-hover) !important;
+  color: var(--sidebar-text) !important;
+}
+
+.sidebar_block .list-unstyled .d-flex.bg-primary {
+  background-color: var(--sidebar-active) !important;
+  color: var(--sidebar-icon-active) !important;
+  font-weight: 600;
+}
+
+.sidebar_block .list-unstyled .d-flex svg,
+.sidebar_block .list-unstyled .d-flex .fa-icon {
+  color: var(--sidebar-icon);
+}
+
+.sidebar_block .list-unstyled .d-flex.bg-primary svg,
+.sidebar_block .list-unstyled .d-flex.bg-primary .fa-icon {
+  color: var(--sidebar-icon-active) !important;
+}
+
+/* Border colors */
+.sidebar_block .border-bottom,
+.sidebar_block .border-top {
+  border-color: var(--sidebar-border) !important;
+}
+
+/* Collapse toggle button */
+.sidebar_block .btn-outline-secondary {
+  background-color: transparent;
+  border-color: var(--sidebar-border);
+  color: var(--sidebar-text);
+}
+
+.sidebar_block .btn-outline-secondary:hover {
+  background-color: var(--sidebar-hover);
+  border-color: var(--sidebar-border);
+  color: var(--sidebar-text);
+}
+
+/* Logout button */
+.sidebar_block .mt-auto .btn {
+  background-color: transparent;
+  color: var(--sidebar-text);
+}
+
+.sidebar_block .mt-auto .btn:hover {
+  background-color: var(--sidebar-hover);
+  color: var(--sidebar-text);
+}
+
+/* Chevron colors */
+.sidebar_block .chev-wrap,
+.sidebar_block span[style*="width: 14px"] {
+  color: var(--sidebar-icon);
+}
+
+.sidebar_block .nav-link.bg-primary .chev-wrap,
+.sidebar_block .nav-link.active .chev-wrap {
+  color: var(--sidebar-icon-active);
+}
+
+/* ============================================
+   SIDEBAR WRAPPER (Layout integration)
+   ============================================ */
+
+/* Desktop: sidebar wrapper takes space in layout */
+.sidebar-wrapper {
+  width: auto;
+  transition: width 0.3s ease;
+}
+
+/* Mobile: sidebar wrapper doesn't take space (offcanvas) */
+@media (max-width: 991.98px) {
+  .sidebar-wrapper {
+    width: 0 !important;
+    min-width: 0 !important;
+    padding: 0 !important;
+  }
 }

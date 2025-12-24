@@ -1,11 +1,13 @@
 import React from "react";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 const Footer = () => {
 
-    const handleVpnClick = () => {
-        const confirmed = window.confirm("Do you want to connect to VPN?");
+    const handleVpnClick = async () => {
+        const confirmed = await confirm("Do you want to connect to VPN?");
         if (confirmed) {
-            alert("Connecting to VPN...");
+            notifyInfo("Connecting to VPN...");
         } else {
             console.log("VPN connection cancelled.");
         }
@@ -15,18 +17,19 @@ const Footer = () => {
         <footer
             className="d-flex justify-content-between align-items-center small px-4  text-white m-0"
             style={{
-                background: "#2F353E",
+                // background: "#2F353E",
+                background: "#010B13",
                 borderTop: "1px solid #2f6aa3",
                 height: "calc(100vh - 94vh)",
             }}
         >
-            <span>Powered by LOM</span>
+            {/* <span>Powered by LOM</span>
 
             <div className="d-flex align-items-center gap-3">
 
                 <span>© {new Date().getFullYear()} LOM Technologies Pvt Ltd</span>
 
-                {/* Bold White VPN Icon */}
+       
                 <img
                     src="https://cdn-icons-png.flaticon.com/512/10015/10015957.png"
                     alt="VPN"
@@ -39,7 +42,7 @@ const Footer = () => {
                     }}
                     onClick={handleVpnClick}
                 />
-            </div>
+            </div> */}
         </footer>
     );
 };

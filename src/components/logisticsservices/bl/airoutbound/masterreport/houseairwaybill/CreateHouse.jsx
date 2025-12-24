@@ -7,7 +7,10 @@ import { createAirOutboundHouse, updateAirOutboundHouse } from "../../airOutboun
 import moment from "moment";
 import NewWindow from "react-new-window";
 import CustomerSearch from "../../../../../common/popup/CustomerSearch";
-import { useUnlockInputs } from "../../../../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../../../../utils/refreshKeyboard";
+import { SHIPMENT_CATEGORY } from "../../../../../../constants/shipment";
+import { DEFAULT_SHIPPER } from "../../../../../../utils/defaultPartyInfo";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../utils/notifications";
 
 
 const CreateHouse = ({ editData, setEditData }) => {
@@ -73,20 +76,20 @@ const CreateHouse = ({ editData, setEditData }) => {
         byFirstCarrier: storedData?.by1 ?? "",
         airportDest: storedData?.airportDestination ?? "",
         requestedFlight: storedData?.flightNo ?? "",
-        declaredValueCarriage: storedData?.declaredCarriage ?? "",
-        declaredValueCustoms: storedData?.declaredCustoms ?? "",
-        departureDate: formatDateForInput(storedData?.departureDate),
-        arrivalDate: formatDateForInput(storedData?.arrivalDate),
-        insuranceAmount: storedData?.insurance ?? "",
+        declaredValueCarriage: storedData?.declaredCarriage ?? null,
+        declaredValueCustoms: storedData?.declaredCustoms ?? null,
+        departureDate: formatDateForInput(storedData?.departureDate) || null,
+        arrivalDate: formatDateForInput(storedData?.arrivalDate) || null,
+        insuranceAmount: storedData?.insurance ?? null,
         freightTerm: storedData?.freightTerm ?? "",
 
         // Currency/Accounting - Auto-filled from job/master
         cur: storedData?.currency ?? "",
         code: storedData?.code ?? "",
-        wtValPp: storedData?.wtvalPP ?? "",
-        coll1: storedData?.coll1 ?? "",
-        otherPp: storedData?.otherPP ?? "",
-        coll2: storedData?.coll2 ?? "",
+        wtValPp: storedData?.wtvalPP ?? null,
+        coll1: storedData?.coll1 ?? null,
+        otherPp: storedData?.otherPP ?? null,
+        coll2: storedData?.coll2 ?? null,
 
         to2: storedData?.rto1 ?? "",
         by2: storedData?.rby1 ?? "",
@@ -96,37 +99,39 @@ const CreateHouse = ({ editData, setEditData }) => {
         // Handling/Invoice
         handlingInfo: storedData?.handlingInfo ?? "",
         shipperInvoiceNo: "",
-        shipperInvoiceDate: "",
-        shipperInvoiceAmount: "",
+        shipperInvoiceDate: null,
+        shipperInvoiceAmount: null,
 
         // Package/Weight - Auto-filled from job/master
-        pieces: storedData?.pieces ?? "",
-        grossWeight: storedData?.grossWeight ?? "",
+        pieces: storedData?.pieces ?? null,
+        grossWeight: storedData?.grossWeight ?? null,
         kgLb: storedData?.kgLb ?? "KG",
         rateClass: storedData?.rateClass ?? "",
-        chargeableWeight: storedData?.chargeableWeight ?? "",
-        rateCharge: storedData?.rateCharge ?? "",
-        asArranged: storedData?.arranged ?? false,
+        chargeableWeight: storedData?.chargeableWeight ?? null,
+        rateCharge: storedData?.rateCharge ?? null,
+        asArranged: storedData?.arranged ?? 0,
         goodsNature: storedData?.natureGoods ?? "",
 
         // Charges - Auto-filled from job/master
-        weightChargePrepaid: storedData?.weightPrepaid ?? "",
-        weightChargeCollect: storedData?.weightCollect ?? "",
-        valuationChargePrepaid: storedData?.valuationPrepaid ?? "",
-        valuationChargeCollect: storedData?.valuationCollect ?? "",
-        taxPrepaid: storedData?.taxPrepaid ?? "",
-        taxCollect: storedData?.taxCollect ?? "",
-        agentChargesPrepaid: storedData?.agentPrepaid ?? "",
-        agentChargesCollect: storedData?.agentCollect ?? "",
-        carrierChargesPrepaid: storedData?.carrierPrepaid ?? "",
-        carrierChargesCollect: storedData?.carrierCollect ?? "",
-        totalPrepaid: storedData?.totalPrepaid ?? "",
-        totalCollect: storedData?.totalCollect ?? "",
+        weightChargePrepaid: storedData?.weightPrepaid ?? null,
+        weightChargeCollect: storedData?.weightCollect ?? null,
+        valuationChargePrepaid: storedData?.valuationPrepaid ?? null,
+        valuationChargeCollect: storedData?.valuationCollect ?? null,
+        taxPrepaid: storedData?.taxPrepaid ?? null,
+        taxCollect: storedData?.taxCollect ?? null,
+        agentChargesPrepaid: storedData?.agentPrepaid ?? null,
+        agentChargesCollect: storedData?.agentCollect ?? null,
+        carrierChargesPrepaid: storedData?.carrierPrepaid ?? null,
+        carrierChargesCollect: storedData?.carrierCollect ?? null,
+        totalPrepaid: storedData?.totalPrepaid ?? null,
+        totalCollect: storedData?.totalCollect ?? null,
 
         // Execution - Auto-filled from job/master
-        executedDate: formatDateForInput(storedData?.executedDate),
+        executedDate: formatDateForInput(storedData?.executedDate) || null,
         placeAt: storedData?.placeAt ?? "",
         signature: storedData?.signature ?? "",
+        agentAddress: storedData?.agentAddress ?? "",
+        notes: storedData?.notes ?? "",
     }
 
 
@@ -137,10 +142,7 @@ const CreateHouse = ({ editData, setEditData }) => {
 
     const isEditing = Boolean(editData?.id);
     const queryClient = useQueryClient();
-
-    // ✅ Keyboard unlock hook for edit mode
-    useUnlockInputs(isEditing);
-
+    
     // ⭐ Auto-fill from sessionStorage on mount (only when NOT editing)
     useEffect(() => {
         // If editing, skip auto-fill (editData will populate the form)
@@ -178,7 +180,59 @@ const CreateHouse = ({ editData, setEditData }) => {
                 ? moment(editData.shipperInvoiceDate).format("YYYY-MM-DD")
                 : "",
         });
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
     }, [editData?.id]);
+
+    // Auto-fill shipper when consol === 'Consol' (Outbound)
+    const consolValue = watch("consol");
+    useEffect(() => {
+        // Skip consol-based auto-fill when editing - preserve existing data
+        if (isEditing) return;
+
+        const isConsol = consolValue === "Consol" || consolValue === "CONSOL";
+        
+        if (isConsol) {
+            // Only auto-fill if fields are empty (don't overwrite user input)
+            const currentName = watch("shipperName");
+            const currentAddr = watch("shipperAddr");
+            
+            if (!currentName && !currentAddr) {
+                setValue("shipperName", DEFAULT_SHIPPER.shipperName);
+                setValue("shipperAddr", DEFAULT_SHIPPER.shipperAddress);
+            }
+        } else {
+            // When Single is selected, clear defaults (only if they match default values)
+            const currentName = watch("shipperName");
+            const currentAddr = watch("shipperAddr");
+            
+            if (currentName === DEFAULT_SHIPPER.shipperName && 
+                currentAddr === DEFAULT_SHIPPER.shipperAddress) {
+                setValue("shipperName", "");
+                setValue("shipperAddr", "");
+            }
+        }
+    }, [consolValue, setValue, isEditing]);
+
+    // Auto-update freightTerm based on shipment
+    const shipment = watch("shipment");
+    useEffect(() => {
+        if (!shipment) {
+            setValue("freightTerm", "");
+            return;
+        }
+
+        const isPrepaid = SHIPMENT_CATEGORY.PREPAID.includes(shipment);
+        const isCollect = SHIPMENT_CATEGORY.COLLECT.includes(shipment);
+
+        if (isPrepaid) {
+            setValue("freightTerm", "FREIGHT PREPAID");
+        } else if (isCollect) {
+            setValue("freightTerm", "FREIGHT COLLECT");
+        } else {
+            setValue("freightTerm", "");
+        }
+    }, [shipment, setValue]);
 
 
 
@@ -215,7 +269,7 @@ const CreateHouse = ({ editData, setEditData }) => {
 
         onSuccess: () => {
             queryClient.invalidateQueries(["airOutboundHouseList", jobNo]);
-            alert("House Created Successfully");
+            notifySuccess("House Created Successfully");
             closeModal();
         },
 
@@ -225,7 +279,7 @@ const CreateHouse = ({ editData, setEditData }) => {
                 error?.response?.data?.error ||
                 error?.message ||
                 "Something went wrong";
-            alert(`Error: ${msg}`);
+            notifyError(`Error: ${msg}`);
         }
     });
 
@@ -236,7 +290,7 @@ const CreateHouse = ({ editData, setEditData }) => {
 
         onSuccess: () => {
             queryClient.invalidateQueries(["airOutboundHouseList", jobNo]);
-            alert("House Updated Successfully");
+            notifySuccess("House Updated Successfully");
             closeModal();
         },
 
@@ -246,7 +300,7 @@ const CreateHouse = ({ editData, setEditData }) => {
                 error?.response?.data?.error ||
                 error?.message ||
                 "Something went wrong";
-            alert(`Error: ${msg}`);
+            notifyError(`Error: ${msg}`);
         }
     });
 
@@ -257,11 +311,47 @@ const CreateHouse = ({ editData, setEditData }) => {
 
         const data = {
             ...form,
+
+            // dropdown -> boolean
             consol: form?.consol === "Consol",
-            package: form.package ? Number(form.package) : null,
-            grossWeight: form.grossWeight ? Number(form.grossWeight) : null,
-            measurement: form.measurement ? Number(form.measurement) : null,
+
+            // date fields -> null if empty
+            departureDate: form.departureDate || null,
+            arrivalDate: form.arrivalDate || null,
+            shipperInvoiceDate: form.shipperInvoiceDate || null,
+            executedDate: form.executedDate || null,
+
+            // numeric fields
+            wtValPp: form.wtValPp ? Number(form.wtValPp) : null,
+            coll1: form.coll1 ? Number(form.coll1) : null,
+            otherPp: form.otherPp ? Number(form.otherPp) : null,
+            coll2: form.coll2 ? Number(form.coll2) : null,
+
+            declaredValueCarriage: form.declaredValueCarriage ? Number(form.declaredValueCarriage) : null,
+            declaredValueCustoms: form.declaredValueCustoms ? Number(form.declaredValueCustoms) : null,
             insuranceAmount: form.insuranceAmount ? Number(form.insuranceAmount) : null,
+            shipperInvoiceAmount: form.shipperInvoiceAmount ? Number(form.shipperInvoiceAmount) : null,
+
+            pieces: form.pieces ? Number(form.pieces) : null,
+            grossWeight: form.grossWeight ? Number(form.grossWeight) : null,
+            chargeableWeight: form.chargeableWeight ? Number(form.chargeableWeight) : null,
+            rateCharge: form.rateCharge ? Number(form.rateCharge) : null,
+
+            weightChargePrepaid: form.weightChargePrepaid ? Number(form.weightChargePrepaid) : null,
+            valuationChargePrepaid: form.valuationChargePrepaid ? Number(form.valuationChargePrepaid) : null,
+            taxPrepaid: form.taxPrepaid ? Number(form.taxPrepaid) : null,
+            agentChargesPrepaid: form.agentChargesPrepaid ? Number(form.agentChargesPrepaid) : null,
+            carrierChargesPrepaid: form.carrierChargesPrepaid ? Number(form.carrierChargesPrepaid) : null,
+            totalPrepaid: form.totalPrepaid ? Number(form.totalPrepaid) : null,
+
+            weightChargeCollect: form.weightChargeCollect ? Number(form.weightChargeCollect) : null,
+            valuationChargeCollect: form.valuationChargeCollect ? Number(form.valuationChargeCollect) : null,
+            taxCollect: form.taxCollect ? Number(form.taxCollect) : null,
+            agentChargesCollect: form.agentChargesCollect ? Number(form.agentChargesCollect) : null,
+            carrierChargesCollect: form.carrierChargesCollect ? Number(form.carrierChargesCollect) : null,
+            totalCollect: form.totalCollect ? Number(form.totalCollect) : null,
+
+            // checkbox -> 1 or 0
             asArranged: form.asArranged ? 1 : 0,
         };
 
@@ -537,7 +627,7 @@ const CreateHouse = ({ editData, setEditData }) => {
                                     />
 
                                     <Controller
-                                        name="shipperAddr"
+                                        name="agentAddress"
                                         control={control}
                                         render={({ field }) => (
                                             <textarea
@@ -991,7 +1081,7 @@ const CreateHouse = ({ editData, setEditData }) => {
                                         name="freightTerm"
                                         control={control}
                                         render={({ field }) => (
-                                            <input {...field} className="form-control form-control-sm" />
+                                            <input {...field} className="form-control form-control-sm" readOnly />
                                         )}
                                     />
                                 </div>

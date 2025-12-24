@@ -74,6 +74,7 @@ const initialValues = {
     place: "",
     dateOfIssue: "",
 }
+
 const CreateMasterBillOfLadding = () => {
     const { control, handleSubmit, watch, setValue, reset } = useForm({
         defaultValues: initialValues,
@@ -87,6 +88,9 @@ const CreateMasterBillOfLadding = () => {
 
     const storedRaw = sessionStorage.getItem("masterAirwayData");
     const storedData = storedRaw ? JSON.parse(storedRaw) : null;
+
+    console.log("storedData", storedData)
+
 
     useEffect(() => {
         if (!storedData) return;

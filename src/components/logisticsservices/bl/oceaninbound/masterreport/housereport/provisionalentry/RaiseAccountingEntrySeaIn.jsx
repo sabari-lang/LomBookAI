@@ -13,6 +13,8 @@ import { MOBILE_OPTIONAL, onlyDigits } from "../../../../../../../utils/validati
 import { createOceanInboundCustomerAccount, updateOceanInboundCustomerAccount, getOceanInboundProvisionals } from "../../../oceanInboundApi";
 import { extractItems } from "../../../../../../../utils/extractItems";
 
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+
 const safeNum = (v) => Number(v ?? 0);
 const safeStr = (v) => (v ?? "").toString();
 const safeArr = (v) => (Array.isArray(v) ? v : []);
@@ -31,6 +33,7 @@ const RaiseAccountingEntrySeaIn = ({ editData, setEditData }) => {
     const hblNo = safeStr(storedHouse?.hbl || storedHouse?.hblNo);
 
     const isEditing = Boolean(editData?._id || editData?.id);
+    
     const [open, setOpen] = useState(false);
 
     // Helper function to format date for input[type="date"]
@@ -203,7 +206,7 @@ const RaiseAccountingEntrySeaIn = ({ editData, setEditData }) => {
             createOceanInboundCustomerAccount(jobNo, hblNo, payload),
         onSuccess: () => {
             queryClient.invalidateQueries(["oceanInboundCustomerAcc", jobNo, hblNo]);
-            alert("Ocean Inbound customer accounting entry created");
+            notifySuccess("Ocean Inbound customer accounting entry created");
             closeModal();
         },
         onError: (err) => handleProvisionalError(err, "Create")
@@ -214,7 +217,7 @@ const RaiseAccountingEntrySeaIn = ({ editData, setEditData }) => {
             updateOceanInboundCustomerAccount(jobNo, hblNo, payload),
         onSuccess: () => {
             queryClient.invalidateQueries(["oceanInboundCustomerAcc", jobNo, hblNo]);
-            alert("Ocean Inbound customer accounting entry updated");
+            notifySuccess("Ocean Inbound customer accounting entry updated");
             closeModal();
         },
         onError: (err) => handleProvisionalError(err, "Update")

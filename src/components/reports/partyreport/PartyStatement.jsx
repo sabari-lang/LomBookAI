@@ -12,28 +12,12 @@ import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 
-const fallbackRows = [
-	{
-		date: "2025-11-10",
-		txnType: "Sale",
-		refNo: "INV001",
-		paymentType: "Cash",
-		debit: 2000,
-		credit: 0,
-		runningBalance: 2000,
-	},
-	{
-		date: "2025-11-11",
-		txnType: "Purchase",
-		refNo: "PUR002",
-		paymentType: "Bank",
-		debit: 0,
-		credit: 1000,
-		runningBalance: -1000,
-	},
-];
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const PartyStatement = () => {
+	// Report filter form - always unlock on mount
+	
+	
 	const form = useForm({
 		defaultValues: {
 			fromDate: "2025-11-01",
@@ -81,7 +65,7 @@ const PartyStatement = () => {
 
 	const apiRows = extractItems(fetched);
 	const pagination = extractPagination(fetched);
-	const tableRows = apiRows.length > 0 ? apiRows : fallbackRows;
+	const tableRows = apiRows;
 	const totalRows = Number.isFinite(pagination.totalCount) ? pagination.totalCount : tableRows.length;
 
 	const filteredRows = useMemo(() => {
@@ -194,7 +178,7 @@ const PartyStatement = () => {
 			setShowPreview(true);
 		} catch (err) {
 			console.error(err);
-			alert("Failed to generate PDF");
+			notifyError("Failed to generate PDF");
 		} finally {
 			if (tempContainer.current) {
 				document.body.removeChild(tempContainer.current);

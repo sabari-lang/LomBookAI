@@ -3,7 +3,10 @@ import { useForm, Controller, useFieldArray } from "react-hook-form";
 
 
 
+
 const CreateMasterAirwayBillOut = () => {
+    // Create-only form - always unlock on mount
+    
     const { control, handleSubmit, watch, reset, setValue } = useForm({
         defaultValues: {
             // leave defaults empty as requested

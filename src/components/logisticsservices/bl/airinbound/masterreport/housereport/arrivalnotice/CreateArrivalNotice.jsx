@@ -9,6 +9,8 @@ import { extractItems } from "../../../../../../../utils/extractItems";
 // Bootstrap modal close
 import bootstrapBundle from "bootstrap/dist/js/bootstrap.bundle";
 import { createAirInboundArrivalNotice, updateAirInboundArrivalNotice, getAirInboundProvisionals } from "../../../Api";
+import { refreshKeyboard } from "../../../../../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
 
 const closeModal = () => {
     const modalElement = document.getElementById("createArrivalNoticeModal");
@@ -87,6 +89,8 @@ const safeStr = (v) => (v ?? "").toString();
 const safeArr = (v) => (Array.isArray(v) ? v : []);
 
 const CreateArrivalNotice = ({ editData, setEditData }) => {
+    const isEditing = Boolean(editData?._id || editData?.id);
+    
     // Get jobNo and hawb from sessionStorage
     const storedMaster = JSON.parse(sessionStorage.getItem("masterAirwayData") ?? "{}");
     const storedHouse = JSON.parse(sessionStorage.getItem("houseAirwayData") ?? "{}");
@@ -96,8 +100,6 @@ const CreateArrivalNotice = ({ editData, setEditData }) => {
     console.log("CreateArrivalNotice Rendered - editData:", storedHouse);
     const jobNo = storedMaster?.jobNo ?? "";
     const hawb = storedHouse?.hawb ?? storedHouse?.hawbNo ?? storedHouse?.houseNumber ?? "";
-
-    const isEditing = Boolean(editData?._id || editData?.id);
 
     // Fetch provisional entries to map to charges
     const { data: provisionalApiRaw, isLoading: provisionalsLoading } = useQuery({
@@ -251,6 +253,8 @@ const CreateArrivalNotice = ({ editData, setEditData }) => {
                 // Use charges from editData if available
                 charges: safeArr(editData?.charges),
             });
+            // Call refreshKeyboard after form values are populated
+            refreshKeyboard();
             lastEditIdRef.current = currentEditId;
             initializedRef.current = true;
         }
@@ -304,7 +308,7 @@ const CreateArrivalNotice = ({ editData, setEditData }) => {
         mutationFn: (payload) => createAirInboundArrivalNotice(jobNo, hawb, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["airInboundArrivalNotice", jobNo, hawb] });
-            alert("Arrival Notice Created");
+            notifySuccess("Arrival Notice Created");
             setEditData?.(null);
             closeModal();
         },
@@ -315,7 +319,7 @@ const CreateArrivalNotice = ({ editData, setEditData }) => {
         mutationFn: (payload) => updateAirInboundArrivalNotice(jobNo, hawb, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["airInboundArrivalNotice", jobNo, hawb] });
-            alert("Arrival Notice Updated");
+            notifySuccess("Arrival Notice Updated");
             setEditData?.(null);
             closeModal();
         },
@@ -327,7 +331,7 @@ const CreateArrivalNotice = ({ editData, setEditData }) => {
     // ------------------------------------
     const onSubmit = (values) => {
         if (!jobNo || !hawb) {
-            alert("Job No and HAWB are required");
+            notifyError("Job No and HAWB are required");
             return;
         }
 

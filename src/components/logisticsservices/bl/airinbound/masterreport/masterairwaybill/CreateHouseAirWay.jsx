@@ -4,12 +4,15 @@ import React, { useEffect } from 'react'
 import { useForm, Controller } from "react-hook-form";
 
 
+
 const CreateHouseAirWay = () => {
+    // Create-only form - always unlock on mount
+    
 
     const storedRaw = sessionStorage.getItem("houseAirwayData");
     const storedData = storedRaw ? JSON.parse(storedRaw) : null;
 
-
+    console.log("storedData", storedData)
 
     // 🔥 Single Source of Truth for Defaults
     const initialValues = {

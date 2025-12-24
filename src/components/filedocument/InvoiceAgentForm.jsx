@@ -7,14 +7,13 @@ import React, {
 } from "react";
 import { useForm, useFieldArray, useWatch, Controller } from "react-hook-form";
 
-import DownloadIcon from "@mui/icons-material/Download";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { api } from "../../lib/httpClient";
 import { saveAs } from "file-saver";
 
 
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import moment from "moment";
 import { useDispatch } from "react-redux";
@@ -22,8 +21,12 @@ import { useDispatch } from "react-redux";
 import { createInvoice, deleteInvoice, getInvoices } from "./api";
 import { removeInvoice } from "../redux/invoiceslice/InvoiceSlice";
 import { images } from "../../assets/images/Image";
-import { useUnlockInputs } from "../../hooks/useUnlockInputs";
+// Removed refreshKeyboard import - auto-refresh disabled by default
+// Infrastructure preserved in utils/refreshKeyboard.js for manual fallback use
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { useAppBack } from "../../hooks/useAppBack";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
+import { confirm } from "../../utils/confirm";
 
 
 
@@ -114,15 +117,9 @@ const InvoiceAgentForm = () => {
         control,
         name: "LineItems",
     });
-    const { state } = useLocation();
-    console.log("Edit state:", state);
-    let invoicedata = state || {};
     const location = useLocation();
-    
-    // ✅ Keyboard unlock hook for edit mode
-    const isEditing = Boolean(invoicedata?.id || invoicedata?._id || invoicedata?.InvoiceName);
-    useUnlockInputs(isEditing);
-    
+    const { state } = location;
+    let invoicedata = state || {};
     const hasSubmittedRef = useRef(false);
     const [records, setRecords] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -131,7 +128,7 @@ const InvoiceAgentForm = () => {
 
     const [downloadloading, setDownLoading] = useState(false);
 
-    const navigate = useNavigate();
+    const { goBack } = useAppBack();
     const dispatch = useDispatch();
 
     const [showRange, setShowRange] = useState(false);
@@ -364,8 +361,9 @@ const InvoiceAgentForm = () => {
                 };
             })
             : [];
-        // Removed refreshKeyboard() to prevent window blinking and input freeze
         replace(mappedItems);
+        // Removed refreshKeyboard() - auto-refresh disabled by default to prevent blinking
+        // Use manual "Fix keyboard input" button in Settings if needed
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [state?.InvoiceId]);
 
@@ -434,7 +432,7 @@ const InvoiceAgentForm = () => {
 
             if (response) {
                 // ✅ Show success alert
-                alert("✅ Invoice submitted successfully!");
+                notifySuccess("✅ Invoice submitted successfully!");
 
                 // Optional: clear from local state if needed
                 const invoiceToRemove = formData?.InvoiceNumber;
@@ -449,7 +447,7 @@ const InvoiceAgentForm = () => {
             }
         } catch (err) {
             console.error("❌ Error submitting invoice:", err);
-            alert("❌ Failed to submit invoice. Please try again."); // ✅ Show error alert
+            notifyError("❌ Failed to submit invoice. Please try again."); // ✅ Show error alert
             // Removed refreshKeyboard() to prevent window blinking and input freeze
         } finally {
             setPostLoading(false);
@@ -458,13 +456,12 @@ const InvoiceAgentForm = () => {
 
     // DELETE API
     const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this invoice?"))
-            return;
+        const confirmed = await confirm("Are you sure you want to delete this invoice?");
+        if (!confirmed) return;
 
         try {
             setDeleteLoading(true);
             const res = await deleteInvoice(id);
-            console.log("Invoice deleted:", res);
 
             // Option 1: Refresh page
             // window.location.reload();
@@ -539,7 +536,7 @@ const InvoiceAgentForm = () => {
             saveAs(blob, filename);
         } catch (e) {
             console.error(e);
-            alert(`Download failed: ${e?.message || "Unknown error"}`);
+            notifyError(`Download failed: ${e?.message || "Unknown error"}`);
         }
     };
 
@@ -580,7 +577,7 @@ const InvoiceAgentForm = () => {
                         {/* Back */}
                         <div
                             style={{ width: 40, height: 40, cursor: "pointer" }}
-                            onClick={() => navigate(-1)}
+                            onClick={() => goBack()}
                         >
                             <span className="text-primary">&larr; Back</span>
                         </div>

@@ -15,7 +15,7 @@ import {
 // ============================================
 export const clearancePendingReport = createReportDefinition(
   'clearancePending',
-  'Clearance Pending Report',
+  'Clearance Pending Reports',
   '/reports/clearance-pending',
   {
     headerColor: '#28a745', // Green
@@ -184,15 +184,14 @@ export const clearancePendingReport = createReportDefinition(
 // ============================================
 export const invoicePendingReport = createReportDefinition(
   'invoicePending',
-  'Invoice Pending Report',
+  'Invoice Pending Reports',
   '/reports/invoice-pending',
   {
     headerColor: '#ffc107', // Yellow
     pageSize: 50,
     apiEndpoint: '/invoice-pending', // Backend endpoint
-    supportsBulkStatus: true,
-    supportsBulkDate: true,
-    bulkDateFields: [{ key: 'clearance_date', label: 'Clearance Date' }],
+    supportsBulkStatus: false,
+    supportsBulkDate: false,
     filterConfig: [
       createFilterField('searchByDateType', 'Search by date', FilterFieldType.SELECT, {
       staticOptions: [
@@ -305,7 +304,7 @@ export const invoicePendingReport = createReportDefinition(
 // ============================================
 export const despatchPendingReport = createReportDefinition(
   'despatchPending',
-  'Despatch Pending Report',
+  'Despatch Pending Reports',
   '/reports/despatch-pending',
   {
     headerColor: '#17a2b8', // Teal
@@ -522,7 +521,7 @@ export const invoiceReport = createReportDefinition(
 // ============================================
 export const blSearchReport = createReportDefinition(
   'blSearch',
-  'B/L Report',
+  'BL Search Reports',
   '/reports/bl-search',
   {
     headerColor: '#6c757d', // Dark grey
@@ -667,7 +666,7 @@ export const blSearchReport = createReportDefinition(
 // ============================================
 export const depositRefundReport = createReportDefinition(
   'depositRefund',
-  'Deposit / Refund Report',
+  'Deposit / Refund Reports',
   '/reports/deposit-refund',
   {
     headerColor: '#ffc107', // Yellow
@@ -747,7 +746,7 @@ export const depositRefundReport = createReportDefinition(
 // ============================================
 export const pendingForQueryReport = createReportDefinition(
   'pendingForQuery',
-  'Pending for Query Report',
+  'Pending For Query Report',
   '/reports/pending-for-query',
   {
     headerColor: '#ffc107', // Yellow
@@ -816,7 +815,7 @@ export const pendingForQueryReport = createReportDefinition(
 // ============================================
 export const jobClosePendingReport = createReportDefinition(
   'jobClosePending',
-  'Job Cost Pending Report',
+  'Job Close Pending Report',
   '/reports/job-close-pending',
   {
     headerColor: '#dc3545', // Red
@@ -923,16 +922,18 @@ export const jobCostingReport = createReportDefinition(
       }),
 
     ],
+    // Column keys must match API response field names exactly
+    // Labels match the Job Cost Report PDF layout
     columnConfig: [
-      createColumnConfig('slNo', 'Sl.No', { sortable: false, visibleByDefault: true }),
-      createColumnConfig('jobCloseDate', 'Job Close Date', { sortable: true, visibleByDefault: true }),
-      createColumnConfig('jobno', 'Jobno', { sortable: true, visibleByDefault: true }),
-      createColumnConfig('houseNumber', 'House Number', { sortable: false, visibleByDefault: true }),
-      createColumnConfig('partyName', 'Party Name', { sortable: true, visibleByDefault: true }),
-      createColumnConfig('income', 'Income', { sortable: true, visibleByDefault: true }),
-      createColumnConfig('expense', 'Expense', { sortable: true, visibleByDefault: true }),
-      createColumnConfig('profit', 'Profit', { sortable: true, visibleByDefault: true }),
-      createColumnConfig('profitPercent', 'Profit %', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('sNo', 'Sl.No', { sortable: false, visibleByDefault: true }),
+      createColumnConfig('date', 'Date', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('jobNo', 'Jobno', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('houseNo', 'House No', { sortable: true, visibleByDefault: true, isLink: true }),
+      createColumnConfig('consigneeName', 'Party Name', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('customerRevenue', 'Income', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('customerExpenses', 'Expense', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('totalProfit', 'Profit', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('profitMargin', 'Profit %', { sortable: true, visibleByDefault: true }),
     ],
   }
 );
@@ -942,7 +943,7 @@ export const jobCostingReport = createReportDefinition(
 // ============================================
 export const jobCostingHeadDetailReport = createReportDefinition(
   'jobCostingHeadDetail',
-  'Job Closed Head Wise Breakup',
+  'Job Costing Head Detail',
   '/reports/job-costing-head-detail',
   {
     headerColor: '#007bff', // Blue
@@ -997,6 +998,61 @@ export const jobCostingHeadDetailReport = createReportDefinition(
 );
 
 // ============================================
+// REPORT 11: DAILY STATUS REPORT
+// ============================================
+export const dailyStatusReport = createReportDefinition(
+  'dailyStatus',
+  'Daily Status Report',
+  '/reports/daily-status',
+  {
+    headerColor: '#17a2b8', // Teal/Cyan
+    pageSize: 50,
+    apiEndpoint: '/daily-status', // Backend endpoint
+    supportsBulkStatus: false,
+    supportsBulkDate: false,
+    filterConfig: [
+      createFilterField('fromDate', 'From', FilterFieldType.DATERANGE, {
+        required: false,
+      }),
+      createFilterField('toDate', 'To', FilterFieldType.DATERANGE, {
+        required: false,
+      }),
+    ],
+    // Column configuration matching the Daily Status image layout
+    columnConfig: [
+      createColumnConfig('sNo', 'S.No', { sortable: false, visibleByDefault: true }),
+      createColumnConfig('priority', 'Priority', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('dept', 'Dept', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('pic', 'P.I.C', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('mod', 'M.O.D', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('jobNo', 'Job No', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('shipper', 'Shipper', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('consignee', 'Consignee', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('mbl', 'MBL', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('hbl', 'HBL', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('invoice', 'Invoice', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('vslName', 'VSL Name', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('etd', 'ETD', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('eta', 'ETA', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('pol', 'POL', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('pod', 'POD', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('boeDeln', 'BoE/Deln', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('lclFcl', 'LCL/FCL', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('containerNo', 'Container #', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('pkgGwt', 'PKG/GWT', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('rmsOpm', 'RMS/OPM', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('cha', 'CHA', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('polPartner', 'POL Partner', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('linerAgent', 'Liner Agent', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('cfs', 'CFS', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('trans', 'Trans', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('currentStatus', 'Current Status', { sortable: true, visibleByDefault: true }),
+      createColumnConfig('remarks', 'Remarks', { sortable: false, visibleByDefault: true }),
+    ],
+  }
+);
+
+// ============================================
 // ALL REPORTS LIST
 // ============================================
 export const allReports = [
@@ -1010,6 +1066,7 @@ export const allReports = [
   jobClosePendingReport,
   jobCostingReport,
   jobCostingHeadDetailReport,
+  dailyStatusReport,
 ];
 
 // Helper to get report by ID

@@ -15,6 +15,8 @@ import { getAirInboundArrivalNotices, deleteAirInboundArrivalNotice } from "../.
 
 import { extractItems } from "../../../../../../../utils/extractItems";
 import { extractPagination } from "../../../../../../../utils/extractPagination";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+import { confirm } from "../../../../../../../utils/confirm";
 
 const ArrivalNotice = () => {
     const queryClient = useQueryClient();
@@ -69,17 +71,18 @@ const ArrivalNotice = () => {
         mutationFn: () => deleteAirInboundArrivalNotice(jobNo, hawb),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["airInboundArrivalNotice", jobNo, hawb] });
-            alert("Arrival Notice deleted successfully");
+            notifySuccess("Arrival Notice deleted successfully");
         },
         onError: (error) => handleProvisionalError(error, "Delete Arrival Notice"),
     });
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
         if (!jobNo || !hawb) {
-            alert("Job No and HAWB are required");
+            notifyError("Job No and HAWB are required");
             return;
         }
-        if (window.confirm("Are you sure you want to delete this Arrival Notice?")) {
+        const confirmed = await confirm("Are you sure you want to delete this Arrival Notice?");
+        if (confirmed) {
             deleteMutation.mutate();
         }
     };
@@ -325,7 +328,7 @@ const ArrivalNotice = () => {
             }
             case 'email': {
                 // Placeholder for future email integration
-                alert('Email action is not configured yet.');
+                notifyInfo("Email action is not configured yet.");
                 break;
             }
             default:

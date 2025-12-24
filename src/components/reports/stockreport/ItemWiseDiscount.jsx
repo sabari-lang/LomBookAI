@@ -2,7 +2,10 @@ import React, { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import DataTable from "react-data-table-component";
 
+
 const ItemWiseDiscount = () => {
+    // Report filter form - always unlock on mount
+    
     const { control } = useForm({
         defaultValues: {
             period: "This Month",

@@ -15,6 +15,8 @@ import {
     deleteOceanOutboundCustomerAccount
 } from "../../../oceanOutboundApi";
 import RaiseAccountingEntrySeaOut from "../provisionalentry/RaiseAccountingEntrySeOut";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+import { confirm } from "../../../../../../../utils/confirm";
 
 
 
@@ -177,15 +179,16 @@ const AccountingCustomerSeaOut = () => {
         mutationFn: ({ id }) => deleteOceanOutboundCustomerAccount(id),
         onSuccess: () => {
             queryClient.invalidateQueries(["oceanOutboundCustomerAcc"]);
-            alert("Deleted Successfully");
+            notifySuccess("Deleted Successfully");
         },
         onError: (err) =>
             handleProvisionalError(err, "Delete Ocean Outbound Customer Accounting"),
     });
 
-    const handleDelete = (row) => {
-        if (!row?.id) return alert("Missing ID!");
-        if (!window.confirm("Delete this entry?")) return;
+    const handleDelete = async (row) => {
+        if (!row?.id) return notifyError("Missing ID!");
+        const confirmed = await confirm("Delete this entry?");
+    if (!confirmed) return;
 
         deleteMutation.mutate({ id: row.id });
     };

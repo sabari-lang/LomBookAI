@@ -1,27 +1,49 @@
 /**
- * Keyboard Input Refresh Utility
+ * Refresh keyboard input focus
  * 
- * Purpose: Unlocks frozen keyboard input in Electron when editing forms
- * How it works: Triggers ultra-fast window blur/focus cycle (5ms) via IPC
- * When to use: Called automatically by useUnlockInputs hook on edit mode entry
+ * Emergency fallback: calls Electron IPC to refresh window focus (blur/focus cycle)
+ * Causes visible blinking - should only be used as manual fallback if keyboard input freezes
  * 
- * Production optimized:
- * - Only runs once per edit session (debounced in hook)
- * - Minimal 5ms delay for near-invisible blink
- * - Safe fallback for non-Electron environments (web browser)
- * - Error handling prevents crashes
+ * Auto-refresh is disabled by default. Use manual trigger in Settings if needed.
+ * 
+ * @param {Object} options
+ * @param {HTMLElement} options.targetElement - Optional element to focus after refresh
+ * @param {boolean} options.force - If true, bypass feature flag check (for manual triggers)
  */
-export const refreshKeyboard = () => {
+export const refreshKeyboard = async (options = {}) => {
+  const { force = false } = options;
+  
+  // Check feature flag unless forced (manual trigger)
+  if (!force) {
+    try {
+      // Dynamic import to check feature flag (config is already evaluated)
+      const { keyboardConfig } = await import('../config/keyboardConfig');
+      if (!keyboardConfig.enableAutoRefresh) {
+        // Auto-refresh disabled - only allow manual triggers
+        return;
+      }
+    } catch (e) {
+      // If config can't be loaded, default to disabled
+      return;
+    }
+  }
+
   try {
-    // Check if running inside Electron with IPC bridge
+    // Simple IPC call to refresh window focus (blur/focus cycle)
     if (window?.electronAPI?.refreshKeyboard) {
       window.electronAPI.refreshKeyboard();
+      
+      // If target element provided, focus it after a short delay
+      if (options?.targetElement) {
+        setTimeout(() => {
+          if (options.targetElement && typeof options.targetElement.focus === 'function') {
+            options.targetElement.focus();
+          }
+        }, 100);
+      }
     }
-    // Silently skip if in web browser (development/testing)
-  } catch (error) {
-    // Non-critical: Log for debugging but don't break app
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('[refreshKeyboard] Not available:', error.message);
-    }
+  } catch (e) {
+    // Ignore if not running inside Electron
+    console.warn('refreshKeyboard failed:', e);
   }
 };

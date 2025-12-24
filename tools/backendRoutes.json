@@ -1,0 +1,144 @@
+{
+  "note": "Backend route catalog - Generated from ASP.NET backend controllers. Update this file when backend routes change.",
+  "lastUpdated": "2024-01-01",
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/config/currency/list",
+      "description": "List all currencies"
+    },
+    {
+      "method": "POST",
+      "path": "/config/currency",
+      "description": "Create currency"
+    },
+    {
+      "method": "GET",
+      "path": "/config/currency/{code}",
+      "description": "Get currency by code"
+    },
+    {
+      "method": "PUT",
+      "path": "/config/currency/{code}",
+      "description": "Update currency"
+    },
+    {
+      "method": "DELETE",
+      "path": "/config/currency/{code}",
+      "description": "Delete currency"
+    },
+    {
+      "method": "GET",
+      "path": "/config/exchange-rate/list",
+      "description": "List exchange rates"
+    },
+    {
+      "method": "GET",
+      "path": "/config/exchange-rate/latest",
+      "description": "Get latest exchange rates"
+    },
+    {
+      "method": "POST",
+      "path": "/config/exchange-rate",
+      "description": "Create exchange rate"
+    },
+    {
+      "method": "POST",
+      "path": "/config/exchange-rate/bulk-import",
+      "description": "Bulk import exchange rates"
+    },
+    {
+      "method": "PUT",
+      "path": "/config/exchange-rate/{rateId}",
+      "description": "Update exchange rate"
+    },
+    {
+      "method": "DELETE",
+      "path": "/config/exchange-rate/{rateId}",
+      "description": "Delete exchange rate"
+    },
+    {
+      "method": "GET",
+      "path": "/config/service/list",
+      "description": "List services"
+    },
+    {
+      "method": "GET",
+      "path": "/config/service/active",
+      "description": "List active services"
+    },
+    {
+      "method": "POST",
+      "path": "/config/service",
+      "description": "Create service"
+    },
+    {
+      "method": "GET",
+      "path": "/config/service/{serviceCode}",
+      "description": "Get service by code"
+    },
+    {
+      "method": "PUT",
+      "path": "/config/service/{serviceCode}",
+      "description": "Update service"
+    },
+    {
+      "method": "DELETE",
+      "path": "/config/service/{serviceCode}",
+      "description": "Delete service"
+    },
+    {
+      "method": "GET",
+      "path": "/vas",
+      "description": "List VAS services"
+    },
+    {
+      "method": "GET",
+      "path": "/vas/{vasId}",
+      "description": "Get VAS by ID"
+    },
+    {
+      "method": "POST",
+      "path": "/vas",
+      "description": "Create VAS"
+    },
+    {
+      "method": "PUT",
+      "path": "/vas/{vasId}",
+      "description": "Update VAS"
+    },
+    {
+      "method": "DELETE",
+      "path": "/vas/{vasId}",
+      "description": "Delete VAS"
+    },
+    {
+      "method": "GET",
+      "path": "/vas/{vasId}/provisional-entries",
+      "description": "Get VAS provisional entries"
+    },
+    {
+      "method": "POST",
+      "path": "/vas/{vasId}/provisional-entries",
+      "description": "Create VAS provisional entry"
+    },
+    {
+      "method": "GET",
+      "path": "/vas/{vasId}/accounting-entries",
+      "description": "Get VAS accounting entries"
+    },
+    {
+      "method": "POST",
+      "path": "/vas/{vasId}/accounting-entries",
+      "description": "Create VAS accounting entry"
+    }
+  ],
+  "notes": [
+    "Commercial logistics routes use /{mode}/master, /{mode}/houses/job/{jobNo}, etc.",
+    "UB (Personal Effects) routes use /ub/{mode}/master, /ub/{mode}/house/job/{jobNo} (singular house)",
+    "UB ocean uses hawb (not hbl) in backend for house routes",
+    "UB accounting uses /ub/{mode}/shipments/{ubId}/provisional-entries and /ub/{mode}/shipments/{ubId}/accounting-entries",
+    "Commercial uses composite routes: job/{jobNo}/hawb/{hawb} or job/{jobNo}/hbl/{hbl}"
+  ]
+}
+

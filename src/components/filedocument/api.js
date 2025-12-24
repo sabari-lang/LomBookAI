@@ -13,6 +13,7 @@
 // ============================================================================
 
 import { api } from "../../lib/httpClient";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
 
 // const BASE_URL = process.env.REACT_APP_BASE_URL;
 
@@ -135,7 +136,7 @@ export async function handleDownload(id) {
             const json = JSON.parse(text);
             msg = json.message || json.error || msg;
         } catch { }
-        alert(msg);
+        notifyError(msg);
         console.error(err);
     }
 }

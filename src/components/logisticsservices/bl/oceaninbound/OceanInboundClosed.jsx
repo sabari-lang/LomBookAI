@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import Pagination from "../../../common/pagination/Pagination";
 import { extractItems } from "../../../../utils/extractItems";
 import { extractPagination } from "../../../../utils/extractPagination";
+import { confirm } from "../../../../utils/confirm";
 import {
     deleteOceanInboundJob,
     getOceanInboundClosedJobs,
@@ -35,10 +36,11 @@ const OceanInboundClosedComp = () => {
         onSettled: () => setDeletingJobKey(null),
     });
 
-    const handleDelete = (row = {}) => {
+    const handleDelete = async (row = {}) => {
         const jobNo = row.jobNo;
         if (!jobNo) return;
-        if (!window.confirm(`Delete Ocean Inbound job ${jobNo}?`)) return;
+        const confirmed = await confirm(`Delete Ocean Inbound job ${jobNo}?`);
+    if (!confirmed) return;
         setDeletingJobKey(jobNo);
         deleteMutation.mutate(jobNo);
     };

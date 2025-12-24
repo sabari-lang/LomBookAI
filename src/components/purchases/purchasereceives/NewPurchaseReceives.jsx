@@ -2,7 +2,10 @@ import React, { useState } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 
 
+
 const NewPurchaseReceives = () => {
+    // Create-only form - always unlock on mount
+    
     const { control, handleSubmit } = useForm({
         defaultValues: {
             vendorName: "",

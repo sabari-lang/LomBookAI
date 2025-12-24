@@ -11,22 +11,12 @@ import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 
-const fallbackRows = [
-    {
-        id: 1,
-        orderDate: "2025-10-30",
-        orderNo: "SO-001",
-        partyName: "Ranjith",
-        dueDate: "2025-11-05",
-        status: "Order Open",
-        orderType: "Sale Order",
-        total: 23600,
-        advance: 23600,
-        balance: 0,
-    },
-];
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const SaleOrderReport = () => {
+    // Report filter form - always unlock on mount
+    
+    
     const form = useForm({
         defaultValues: {
             fromDate: "2025-10-01",
@@ -78,7 +68,7 @@ const SaleOrderReport = () => {
 
     const apiRows = extractItems(fetched);
     const pagination = extractPagination(fetched);
-    const tableRows = apiRows.length > 0 ? apiRows : fallbackRows;
+    const tableRows = apiRows;
     const totalRows = Number.isFinite(pagination.totalCount) ? pagination.totalCount : tableRows.length;
 
     const filteredRows = useMemo(() => {
@@ -209,7 +199,7 @@ const SaleOrderReport = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to generate PDF");
+            notifyError("Failed to generate PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);

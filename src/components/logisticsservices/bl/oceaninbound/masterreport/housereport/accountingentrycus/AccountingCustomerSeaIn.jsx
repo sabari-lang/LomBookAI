@@ -16,6 +16,8 @@ import {
 } from "../../../oceanInboundApi";
 
 import RaiseAccountingEntrySeaIn from "../provisionalentry/RaiseAccountingEntrySeaIn";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+import { confirm } from "../../../../../../../utils/confirm";
 
 const AccountingCustomerSeaIn = () => {
 
@@ -177,15 +179,16 @@ const AccountingCustomerSeaIn = () => {
         mutationFn: ({ id }) => deleteOceanInboundCustomerAccount(id),
         onSuccess: () => {
             queryClient.invalidateQueries(["oceanInboundCustomerAcc"]);
-            alert("Deleted Successfully");
+            notifySuccess("Deleted Successfully");
         },
         onError: (err) =>
             handleProvisionalError(err, "Delete Ocean Inbound Customer Accounting"),
     });
 
-    const handleDelete = (row) => {
-        if (!row?.id) return alert("Missing ID!");
-        if (!window.confirm("Delete this entry?")) return;
+    const handleDelete = async (row) => {
+        if (!row?.id) return notifyError("Missing ID!");
+        const confirmed = await confirm("Delete this entry?");
+    if (!confirmed) return;
 
         deleteMutation.mutate({ id: row.id });
     };

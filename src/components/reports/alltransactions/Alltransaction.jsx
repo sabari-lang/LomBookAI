@@ -12,39 +12,7 @@ import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
-
-const fallbackRows = [
-    {
-        date: "2025-11-01",
-        refNo: "INV001",
-        partyName: "ranjith",
-        category: "General",
-        type: "Purchase",
-        total: 17700,
-        received: 0,
-        balance: 17700,
-    },
-    {
-        date: "2025-11-03",
-        refNo: "INV002",
-        partyName: "suresh",
-        category: "General",
-        type: "Sale",
-        total: 12500,
-        received: 12500,
-        balance: 0,
-    },
-    {
-        date: "2025-11-05",
-        refNo: "INV003",
-        partyName: "mani",
-        category: "Expense",
-        type: "Payment-Out",
-        total: 3000,
-        received: 0,
-        balance: 3000,
-    },
-];
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const AllTransaction = () => {
     const today = new Date();
@@ -98,7 +66,7 @@ const AllTransaction = () => {
 
     const apiRows = extractItems(fetched);
     const pagination = extractPagination(fetched);
-    const tableRows = apiRows.length > 0 ? apiRows : fallbackRows;
+    const tableRows = apiRows;
     const totalRows = Number.isFinite(pagination.totalCount) ? pagination.totalCount : tableRows.length;
 
     const filteredData = useMemo(() => {
@@ -249,7 +217,7 @@ const AllTransaction = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to generate PDF");
+            notifyError("Failed to generate PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);

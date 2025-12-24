@@ -3,6 +3,8 @@ import { useForm } from "react-hook-form";
 import { useLocation } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+
 const NewPriceList = () => {
     const { state } = useLocation();
     const {
@@ -28,6 +30,8 @@ const NewPriceList = () => {
     const [selectedType, setSelectedType] = useState("All Items");
 
     const editId = state?.id;
+    const isEditing = Boolean(editId);
+    u
 
     // 🔁 Dynamic form value logic (edit mode / deep-link state)
     useEffect(() => {
@@ -54,7 +58,7 @@ const NewPriceList = () => {
 
     const onSubmit = (data) => {
         console.log("Form Submitted:", data);
-        alert("Price List Saved Successfully!");
+        notifySuccess("Price List Saved Successfully!");
     };
 
     return (

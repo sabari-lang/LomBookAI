@@ -1,16 +1,15 @@
 import React, { useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import moment from "moment";
 
 import { toWords } from "number-to-words";
 
 import html2pdf from "html2pdf.js";
+import { useAppBack } from "../../hooks/useAppBack";
 
 const InvoiceDownload = () => {
     const { state } = useLocation();
-
-    
-    const navigate = useNavigate();
+    const { goBack } = useAppBack();
 
     const InvoiceData = state || {};
 
@@ -522,7 +521,7 @@ const InvoiceDownload = () => {
                     <button
                         type="button"
                         className="btn btn-light"
-                        onClick={() => navigate(-1)}
+                        onClick={() => goBack()}
                         aria-label="Go back"
                     >
                         ← BACK

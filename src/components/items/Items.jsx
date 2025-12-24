@@ -11,6 +11,8 @@ import PdfPreviewModal from "../common/popup/PdfPreviewModal";
 import * as XLSX from "xlsx";   // ✅ EXCEL ADDED
 import { deleteItem, getItems } from "./api";
 import { extractItems } from "../../utils/extractItems";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
+import { confirm } from "../../utils/confirm";
 
 const Items = () => {
     const navigate = useNavigate();
@@ -87,11 +89,12 @@ const Items = () => {
     // ✅ Delete Selected
     const handleDelete = async () => {
         if (selectedRows.length === 0) {
-            alert("Please select items to delete.");
+            notifyInfo("Please select items to delete.");
             return;
         }
 
-        if (!window.confirm("Are you sure you want to delete selected items?")) return;
+        const confirmed = await confirm("Are you sure you want to delete selected items?");
+    if (!confirmed) return;
 
         const idsToDelete = selectedRows.map((r) => r?.id).filter(Boolean);
         if (idsToDelete.length === 0) return;
@@ -102,7 +105,7 @@ const Items = () => {
             setSelectedRows([]);
         } catch (error) {
             console.error("Failed to delete items", error);
-            alert("Unable to delete selected items. Please try again.");
+            notifyError("Unable to delete selected items. Please try again.");
         }
     };
 

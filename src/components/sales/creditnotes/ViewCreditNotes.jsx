@@ -18,6 +18,8 @@ import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
 import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 
 // ---------------- NORMALIZE FIELDS ----------------
@@ -92,11 +94,12 @@ const ViewCreditNotes = () => {
     },
   });
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (selectedIds.length === 0)
-      return alert("Select at least one credit note.");
+      return notifyInfo("Select at least one credit note.");
 
-    if (!window.confirm("Delete selected credit notes?")) return;
+    const confirmed = await confirm("Delete selected credit notes?");
+    if (!confirmed) return;
 
     selectedIds.forEach((id) => deleteMutation.mutate(id));
   };

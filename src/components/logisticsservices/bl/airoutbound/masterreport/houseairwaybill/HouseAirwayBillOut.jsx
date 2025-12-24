@@ -15,6 +15,8 @@ import Pagination from "../../../../../common/pagination/Pagination";
 import { extractPagination } from "../../../../../../utils/extractPagination";
 import { extractItems } from "../../../../../../utils/extractItems";
 import { getAirOutboundHouses, deleteAirOutboundHouse, updateAirOutboundHouseStatus } from "../../airOutboundApi";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../utils/notifications";
+import { confirm } from "../../../../../../utils/confirm";
 
 const HouseAirwayBillOut = () => {
     const navigate = useNavigate();
@@ -62,7 +64,7 @@ const HouseAirwayBillOut = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["airOutboundHouseList", jobNo] });
             setEditData(null);
-            alert("Status updated successfully!");
+            notifySuccess("Status updated successfully!");
             const modalElement = document.getElementById("airoutboundHouseStatusUpdateModal");
             if (modalElement) {
                 const modal = window.bootstrap?.Modal.getInstance(modalElement);
@@ -72,13 +74,14 @@ const HouseAirwayBillOut = () => {
         onError: (error) => handleProvisionalError(error, "Status Update"),
     });
 
-    const handleDelete = (row) => {
+    const handleDelete = async (row) => {
         const hawb = row.hawb ?? row.hawbNo ?? row.houseNumber;
         if (!hawb || !jobNo) {
-            alert("Missing jobNo or hawb information");
+            notifyError("Missing jobNo or hawb information");
             return;
         }
-        if (window.confirm(`Are you sure you want to delete house ${hawb}?`)) {
+        const confirmed = await confirm(`Are you sure you want to delete house ${hawb}?`);
+        if (confirmed) {
             deleteMutation.mutate({ jobNo, hawb });
         }
     };
@@ -87,7 +90,7 @@ const HouseAirwayBillOut = () => {
         if (!editData) return;
         const hawb = editData.hawb ?? editData.hawbNo ?? editData.houseNumber;
         if (!hawb || !jobNo) {
-            alert("Missing jobNo or hawb information");
+            notifyError("Missing jobNo or hawb information");
             return;
         }
         statusUpdateMutation.mutate({ jobNo, hawb, payload: formData });

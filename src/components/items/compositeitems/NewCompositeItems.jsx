@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
-import { useNavigate, useLocation } from "react-router-dom";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
+import { useLocation } from "react-router-dom";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { useAppBack } from "../../../hooks/useAppBack";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const NewCompositeItems = () => {
-    const navigate = useNavigate();
+    const { goBack } = useAppBack();
     const { state } = useLocation(); // <-- edit mode data (optional)
     const [manufacturers, setManufacturers] = useState(["Manufacturer A", "Manufacturer B"]);
     const [brands, setBrands] = useState(["Brand X", "Brand Y"]);
@@ -88,9 +90,6 @@ const NewCompositeItems = () => {
     const editId = state?.id;
     const isEditing = Boolean(editId);
 
-    // ✅ Keyboard unlock hook for edit mode (removes disabled={!!state} locks)
-    useUnlockInputs(isEditing);
-
     // --- Edit Mode: prefill all values safely
     useEffect(() => {
         if (!editId) return;
@@ -107,6 +106,8 @@ const NewCompositeItems = () => {
             sellable: state?.sellable ?? true,
             purchasable: state?.purchasable ?? true,
         });
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
     }, [editId]);
 
 
@@ -130,7 +131,7 @@ const NewCompositeItems = () => {
     };
     const onSubmit = (data) => {
         console.log("Composite Item Form:", data);
-        alert(state ? "Composite Item Updated ✅" : "Composite Item Saved ✅");
+        notifySuccess(state ? "Composite Item Updated ✅" : "Composite Item Saved ✅");
     };
 
     return (
@@ -984,7 +985,7 @@ const NewCompositeItems = () => {
                     <button
                         type="button"
                         className="btn btn-light border btn-sm px-4"
-                        onClick={() => navigate(-1)}
+                        onClick={() => goBack()}
                     >
                         Cancel
                     </button>

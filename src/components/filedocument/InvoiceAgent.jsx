@@ -1,1206 +1,748 @@
-// AirInboundJobFromInvoice.jsx
-// Front-end for FastAPI invoice analyzer -> AIR INBOUND JOB fields
-
-import React, { useRef, useState } from "react";
-
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import JobCreationAirInbound from "../logisticsservices/bl/airinbound/JobCreation";
 import JobCreationAirOutbound from "../logisticsservices/bl/airoutbound/JobCreation";
 import JobCreationSeaInbound from "../logisticsservices/bl/oceaninbound/JobCreationSeaInbound";
 import JobCreationSeaOutbound from "../logisticsservices/bl/oceanoutbound/JobCreationSeaOutbound";
-import { useNavigate } from "react-router-dom";
+import { notifyInfo, notifyError } from "../../utils/notifications";
 
-
-/** CONFIG **************************************************************/
-
-const ANALYZE_URL = "http://ocr.lomtech.ai/analyze";
+const API_URL = "https://ocr.lomtech.ai/analyze";
 
 const ALLOWED_TYPES = new Set([
-    "application/pdf",
-    "image/png",
-    "image/jpeg",
-    "image/jpg",
-    "image/webp",
-    "image/tiff",
-    "image/tif",
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/tiff",
+  "image/tif",
 ]);
 
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-
-/** JOB INITIAL VALUES **************************************************/
-
-const initialJobValues = {
-    jobNo: "",
-    blType: "Master B/L",
-    consol: "Consol",
-    importType: "Import",
-    mawbNo: "",
-    shipment: "",
-    status: "Open",
-    branch: "HEAD OFFICE",
-
-    shipperName: "",
-    shipperAddress: "",
-    airWayBill: "",
-    agentAddress: "",
-
-    // IMPORTANT: no LOM defaults any more
-    consigneeName: "",
-    consigneeAddress: "",
-
-    notifyName: "",
-    notifyAddress: "",
-
-    issuingAgent: "",
-    iataCode: "",
-    accountNo: "",
-    airportDeparture: "",
-    to1: "",
-    by1: "",
-
-    airportDestination: "",
-    flightNo: "",
-    departureDate: "",
-    arrivalDate: "",
-    handlingInfo: "",
-
-    accountingInfo: "",
-    currency: "",
-    code: "",
-    wtvalPP: "",
-    coll1: "",
-    otherPP: "",
-    coll2: "",
-    rto1: "",
-    rby1: "",
-    rto2: "",
-    rby2: "",
-
-    declaredCarriage: "N.V.D",
-    declaredCustoms: "NVC",
-    insurance: "NIL",
-    freightTerm: "",
-
-    pieces: "",
-    grossWeight: "",
-    kgLb: "KG",
-    rateClass: "Q",
-    chargeableWeight: "",
-    rateCharge: "",
-    arranged: false,
-    totalCharge: "",
-
-    natureGoods: "",
-
-    weightPrepaid: "",
-    weightCollect: "",
-    valuationPrepaid: "",
-    valuationCollect: "",
-    taxPrepaid: "",
-    taxCollect: "",
-    agentPrepaid: "",
-    agentCollect: "",
-    carrierPrepaid: "",
-    carrierCollect: "",
-    totalPrepaid: "",
-    totalCollect: "",
-
-    executedDate: "",
-    placeAt: "CHENNAI",
-    signature: "LOM TECHNOLOGY",
-};
-
-/** HELPERS *************************************************************/
+const MAX_BYTES = 10 * 1024 * 1024; // 10MB
 
 function bytes(n) {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function classNames(...xs) {
-    return xs.filter(Boolean).join(" ");
+  return xs.filter(Boolean).join(" ");
 }
 
-/** ---- SMALL HELPERS ---- **/
+const pick = (v, def = "—") => (v === null || v === undefined || v === "" ? def : v);
 
-const safe = (v) =>
-    v === null || v === undefined ? "" : String(v).trim();
+const openBootstrapModalById = (id) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const bs = window.bootstrap;
+  if (bs?.Modal) {
+    const modal = bs.Modal.getInstance(el) || new bs.Modal(el);
+    modal.show();
+  } else if (window.$) {
+    window.$(el).modal("show");
+  }
+};
+
+// Schema keys your UI expects from OCR analyze
+const JOB_KEYS = [
+  "jobNo",
+  "blType",
+  "mblNo",
+  "shipperName",
+  "shipperAddress",
+  "consigneeName",
+  "consigneeAddress",
+  "notifyName",
+  "notifyAddress",
+  "portLoading",
+  "portDischarge",
+  "placeDelivery",
+  "finalDestination",
+  "vesselName",
+  "voy",
+  "package",
+  "grossWeight",
+  "measurement",
+  "freightTerm",
+  "dateOfIssue",
+];
+
+function toSchemaJobCreation(jc) {
+  const obj = jc && typeof jc === "object" ? jc : {};
+  const out = {};
+  for (const k of JOB_KEYS) out[k] = obj[k] ?? null;
+
+  if (out.measurement === 0) out.measurement = null;
+  return out;
+}
+
+function coerceVal(v) {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim();
+  if (!s || s === "null") return null;
+  if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+  return s;
+}
 
 /**
- * Try to salvage JSON from result.raw even if there is trailing garbage.
+ * Extract schema fields from debug.model_preview, even if JSON is truncated.
  */
-function safeParseInvoiceRaw(raw) {
-    if (!raw) return null;
-    if (typeof raw === "object") return raw;
-    if (typeof raw !== "string") return null;
+function extractJobCreationFromModelPreview(previewText) {
+  if (!previewText || typeof previewText !== "string") return null;
 
-    let candidate = raw.trim();
-    const firstBrace = candidate.indexOf("{");
-    const lastBrace = candidate.lastIndexOf("}");
+  // First, attempt to parse full JSON and return jobCreation if present
+  try {
+    const parsed = JSON.parse(previewText);
+    if (parsed && typeof parsed === "object" && parsed.jobCreation && typeof parsed.jobCreation === "object") {
+      return parsed.jobCreation;
+    }
+  } catch (e) {
+    // ignore parse errors and fallback to regex salvage
+  }
 
-    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-        return null;
+  // Fallback: existing regex-based salvage limited to JOB_KEYS
+  const jc = {};
+  let foundAny = false;
+
+  for (const k of JOB_KEYS) {
+    const re = new RegExp(`"${k}"\\s*:\\s*(null|-?\\d+(?:\\.\\d+)?|"[^"]*")`, "i");
+    const m = previewText.match(re);
+
+    if (!m) {
+      jc[k] = null;
+      continue;
     }
 
-    candidate = candidate.slice(firstBrace, lastBrace + 1);
+    let raw = m[1];
+    if (raw.startsWith('"') && raw.endsWith('"')) raw = raw.slice(1, -1);
+    jc[k] = coerceVal(raw);
+    foundAny = true;
+  }
 
-    // try a light cleanup for trailing commas: ",}" or ",]"
-    candidate = candidate.replace(/,(\s*[}\]])/g, "$1");
+  if (!foundAny) return null;
+  if (jc.measurement === 0) jc.measurement = null;
+  return jc;
+}
+
+function normalizeAnalyzeResponse(apiJson) {
+  if (!apiJson || typeof apiJson !== "object") {
+    return { ok: false, jobCreation: null, rawText: "", meta: {}, debug: null, error: "Bad response" };
+  }
+
+  const preview = apiJson?.debug?.model_preview;
+  const previewJobCreation = extractJobCreationFromModelPreview(preview);
+
+  if (apiJson.jobCreation && typeof apiJson.jobCreation === "object") {
+    const merged = previewJobCreation
+      ? { ...apiJson.jobCreation, ...previewJobCreation }
+      : apiJson.jobCreation;
+    return {
+      ok: true,
+      jobCreation: toSchemaJobCreation(merged),
+      rawText: JSON.stringify(apiJson, null, 2),
+      meta: apiJson.meta || {},
+      debug: apiJson.debug || null,
+      error: apiJson.error || null,
+    };
+  }
+
+  const salvaged = previewJobCreation;
+
+  if (salvaged) {
+    return {
+      ok: true,
+      jobCreation: toSchemaJobCreation(salvaged),
+      rawText: JSON.stringify(apiJson, null, 2),
+      meta: apiJson.meta || {},
+      debug: apiJson.debug || null,
+      error: apiJson.error || null,
+    };
+  }
+
+  return {
+    ok: false,
+    jobCreation: null,
+    rawText: JSON.stringify(apiJson, null, 2),
+    meta: apiJson.meta || {},
+    debug: apiJson.debug || null,
+    error: apiJson.error || "Unknown error",
+  };
+}
+
+/** ---------------------------------------------------------------------
+ *  IMPORTANT: Conversion mappers (InvoiceAgentCopy.jsx style)
+ *  - Forms expect string inputs, so we cast to string.
+ *  - We only map what we actually have from OCR schema.
+ *  - No business logic changes inside job creation modules.
+ * --------------------------------------------------------------------- */
+const s = (v) => (v === null || v === undefined ? "" : String(v));
+
+function mapSchemaToAirInboundEditData(jc) {
+  const x = jc || {};
+  return {
+    jobNo: s(x.jobNo),
+    blType: s(x.blType || "Master B/L"),
+
+    mawbNo: s(x.mblNo),
+    airWayBill: s(x.mblNo),
+
+    shipperName: s(x.shipperName),
+    shipperAddress: s(x.shipperAddress),
+
+    consigneeName: s(x.consigneeName),
+    consigneeAddress: s(x.consigneeAddress),
+
+    notifyName: s(x.notifyName),
+    notifyAddress: s(x.notifyAddress),
+
+    airportDeparture: s(x.portLoading || x.departurePort),
+    airportDestination: s(x.portDischarge || x.arrivalPort),
+
+    pieces: s(x.package),
+    grossWeight: s(x.grossWeight),
+
+    freightTerm: s(x.freightTerm),
+    departureDate: s(x.dateOfIssue || x.flightDate),
+
+    // DO NOT number-convert these (must remain strings)
+    wtvalPP: s(""),
+    coll1: s(""),
+    otherPP: s(""),
+    coll2: s(""),
+    declaredCarriage: s("N.V.D"),
+    declaredCustoms: s("NVC"),
+    insurance: s("NIL"),
+  };
+}
+
+function mapSchemaToAirOutboundEditData(jc) {
+  const x = jc || {};
+  return {
+    jobNo: s(x.jobNo),
+    blType: s(x.blType || "Master B/L"),
+
+    mawbNo: s(x.mblNo),
+    airWayBill: s(x.mblNo),
+
+    shipperName: s(x.shipperName),
+    shipperAddress: s(x.shipperAddress),
+
+    consigneeName: s(x.consigneeName),
+    consigneeAddress: s(x.consigneeAddress),
+
+    notifyName: s(x.notifyName),
+    notifyAddress: s(x.notifyAddress),
+
+    airportDeparture: s(x.portLoading || x.departurePort),
+    airportDestination: s(x.portDischarge || x.arrivalPort),
+
+    pieces: s(x.package),
+    grossWeight: s(x.grossWeight),
+
+    freightTerm: s(x.freightTerm),
+    departureDate: s(x.dateOfIssue || x.flightDate),
+
+    // DO NOT number-convert these (must remain strings)
+    wtvalPP: s(""),
+    coll1: s(""),
+    otherPP: s(""),
+    coll2: s(""),
+    declaredCarriage: s("N.V.D"),
+    declaredCustoms: s("NVC"),
+    insurance: s("NIL"),
+  };
+}
+
+function mapSchemaToSeaInboundEditData(jc) {
+  const x = jc || {};
+  return {
+    jobNo: s(x.jobNo),
+    blType: s(x.blType || "Master B/L"),
+    mblNo: s(x.mblNo),
+    hblNo: s(x.hblNo),
+    shipperName: s(x.shipperName),
+    shipperAddress: s(x.shipperAddress),
+    consigneeName: s(x.consigneeName),
+    consigneeAddress: s(x.consigneeAddress),
+    notifyName: s(x.notifyName),
+    notifyAddress: s(x.notifyAddress),
+    portLoading: s(x.portLoading || x.departurePort),
+    portDischarge: s(x.portDischarge || x.arrivalPort),
+    placeDelivery: s(x.placeDelivery),
+    finalDestination: s(x.finalDestination),
+    vesselName: s(x.vesselName),
+    voy: s(x.voy),
+    package: s(x.package),
+    grossWeight: s(x.grossWeight),
+    measurement: s(x.measurement),
+    freightTerm: s(x.freightTerm),
+    dateOfIssue: s(x.dateOfIssue),
+  };
+}
+
+function mapSchemaToSeaOutboundEditData(jc) {
+  const x = jc || {};
+  return {
+    jobNo: s(x.jobNo),
+    blType: s(x.blType || "Master B/L"),
+    mblNo: s(x.mblNo),
+    hblNo: s(x.hblNo),
+    shipperName: s(x.shipperName),
+    shipperAddress: s(x.shipperAddress),
+    consigneeName: s(x.consigneeName),
+    consigneeAddress: s(x.consigneeAddress),
+    notifyName: s(x.notifyName),
+    notifyAddress: s(x.notifyAddress),
+    portLoading: s(x.portLoading || x.departurePort),
+    portDischarge: s(x.portDischarge || x.arrivalPort),
+    placeDelivery: s(x.placeDelivery),
+    finalDestination: s(x.finalDestination),
+    vesselName: s(x.vesselName),
+    voy: s(x.voy),
+    package: s(x.package),
+    grossWeight: s(x.grossWeight),
+    measurement: s(x.measurement),
+    freightTerm: s(x.freightTerm),
+    dateOfIssue: s(x.dateOfIssue),
+  };
+}
+
+export default function InvoiceAgent() {
+  const navigate = useNavigate();
+  const [files, setFiles] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [results, setResults] = useState([]);
+  const [expanded, setExpanded] = useState({});
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const dropRef = useRef(null);
+
+  const validateAndSet = (list) => {
+    setError("");
+    const valid = [];
+    for (const f of list) {
+      if (!ALLOWED_TYPES.has(f.type)) {
+        notifyError(`Invalid file type for "${f.name}". Allowed: PDF / PNG / JPG / WEBP / TIFF`);
+        continue;
+      }
+      if (f.size > MAX_BYTES) {
+        notifyError(`"${f.name}" is too large (${bytes(f.size)}). Max allowed is ${bytes(MAX_BYTES)}.`);
+        continue;
+      }
+      valid.push(f);
+    }
+    setFiles((prev) => [...prev, ...valid]);
+  };
+
+  const onPick = (e) => {
+    const picked = Array.from(e.target.files || []);
+    validateAndSet(picked);
+    e.currentTarget.value = "";
+  };
+
+  const onDrop = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const picked = Array.from(e.dataTransfer?.files || []);
+    validateAndSet(picked);
+  }, []);
+
+  const onDragOver = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
+
+  const clearAll = () => {
+    setFiles([]);
+    setResults([]);
+    setExpanded({});
+    setError("");
+  };
+
+  async function analyzeOneFile(file) {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    form.append("debug", "true");
+
+    const res = await fetch(API_URL, { method: "POST", body: form });
+    const text = await res.text();
+
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`Non-JSON response (${res.status}). First 200 chars: ${text.slice(0, 200)}`);
+    }
+
+    const norm = normalizeAnalyzeResponse(json);
+
+    return {
+      fileName: file.name,
+      contentType: file.type,
+      ok: norm.ok,
+      status: norm.ok ? "Success" : "Failed",
+      jobCreation: norm.jobCreation,
+      rawText: norm.rawText,
+      httpStatus: res.status,
+      meta: norm.meta,
+      debug: norm.debug,
+      backendError: norm.error,
+    };
+  }
+
+  const submitBatch = async () => {
+    if (!files.length) return setError("Please add at least one PDF/image.");
+
+    setSubmitting(true);
+    setError("");
+    setResults([]);
 
     try {
-        return JSON.parse(candidate);
+      const out = [];
+      for (const f of files) {
+        // eslint-disable-next-line no-await-in-loop
+        const one = await analyzeOneFile(f);
+        out.push(one);
+        setResults([...out]);
+      }
     } catch (e) {
-        console.error("safeParseInvoiceRaw: JSON.parse failed", e, candidate);
-        return null;
+      console.error(e);
+      setError(e?.message || "Analyze failed");
+    } finally {
+      setSubmitting(false);
     }
-}
+  };
 
-/**
- * Normalize all the different shapes we have seen into a single "doc" object:
- *
- * 1) parsed = { vendor, buyer, invoice, shipping, freight, customs }
- * 2) parsed = { invoice: { vendor, buyer, invoice_details, shipping_details, ... } }
- * 3) parsed = { invoice: { vendor, buyer, invoice_id, issue_date, ... } }
- */
-function normalizeDoc(invoiceWrapper) {
-    if (!invoiceWrapper || typeof invoiceWrapper !== "object") return null;
+  const JOB_TABLE_FIELDS = [
+    "jobNo",
+    "blType",
+    "mblNo",
+    "shipperName",
+    "consigneeName",
+    "portLoading",
+    "portDischarge",
+    "package",
+    "grossWeight",
+    "freightTerm",
+    "dateOfIssue",
+  ];
 
-    // Case 2/3: everything is inside invoice, and wrapper itself has no vendor/buyer
-    if (
-        invoiceWrapper.invoice &&
-        !invoiceWrapper.vendor &&
-        !invoiceWrapper.buyer &&
-        typeof invoiceWrapper.invoice === "object"
-    ) {
-        return invoiceWrapper.invoice;
-    }
+  const rows = useMemo(() => {
+    return (results || []).map((r, idx) => {
+      const jc = r.jobCreation || {};
+      const row = {
+        id: `${idx}__${r.fileName}`,
+        idx,
+        fileName: r.fileName,
+        status: r.status,
+        raw: r,
+      };
+      JOB_TABLE_FIELDS.forEach((field) => {
+        row[field] = pick(jc[field]);
+      });
+      return row;
+    });
+  }, [results]);
 
-    // Case 1: vendor/buyer/etc are already at top level
-    return invoiceWrapper;
-}
+  console.log(rows);
 
-/**
- * Main mapping: DOCUMENT JSON -> Job form values.
- */
-function mapInvoiceToJobFromRaw(initial, invoiceWrapper) {
-    const doc = normalizeDoc(invoiceWrapper);
-    if (!doc) return initial;
+  // --- Modal states (InvoiceAgentCopy.jsx style) ---
+  const [editDataAirInbound, setEditDataAirInbound] = useState(null);
 
-    // ---- Parties ----
-    const vendor = doc.vendor || {}; // usually the forwarder / LOM or exporter
-    const buyer = doc.buyer || {}; // usually importer / customer
+  // Outbound/Sea are Bootstrap modal components always mounted (like InvoiceAgentCopy.jsx)
+  const [editDataAirOutbound, setEditDataAirOutbound] = useState(null);
+  const [editDataSeaInbound, setEditDataSeaInbound] = useState(null);
+  const [editDataSeaOutbound, setEditDataSeaOutbound] = useState(null);
 
-    // Some JSONs have "shipping_details", some "shipping", some only "freight"
-    const shipping = doc.shipping_details || doc.shipping || {};
-    const freight = doc.freight || doc.shipping_details || {};
-    const shippingWeight =
-        doc.shipping_weight || shipping.shipping_weight || {};
-    const shippingDims =
-        doc.shipping_dimensions || shipping.shipping_dimensions || {};
+  return (
+    <div className="p-4 max-w-7xl mx-auto">
+      <div className="tw-flex tw-flex-col sm:tw-flex-row sm:tw-items-center sm:tw-justify-between tw-gap-3 tw-mb-4">
+        <h2 className="tw-text-2xl tw-font-semibold">Invoice Agent (Analyze → Convert)</h2>
 
-    // ---- Invoice section ----
-    const invSection =
-        doc.invoice ||
-        doc.invoice_details ||
-        {
-            invoice_id: doc.invoice_id,
-            invoice_no: doc.invoice_no,
-            invoice_number: doc.invoice_number,
-            issue_date: doc.issue_date,
-            due_date: doc.due_date,
-            currency: doc.currency,
-            amount: doc.amount,
-            subtotal: doc.subtotal,
-            tax: doc.tax,
-            total: doc.total,
-        };
+        <div className="tw-flex tw-gap-2">
+          <button
+            className="tw-px-3 tw-py-2 tw-rounded tw-border tw-bg-white hover:tw-bg-gray-50 disabled:tw-opacity-50"
+            onClick={clearAll}
+            disabled={submitting}
+          >
+            Clear
+          </button>
 
-    const jobNo =
-        invSection.invoice_id ||
-        invSection.invoice_no ||
-        invSection.invoice_number ||
-        "";
+          <button
+            className="tw-px-4 tw-py-2 tw-rounded tw-bg-blue-600 tw-text-white disabled:tw-opacity-50"
+            onClick={submitBatch}
+            disabled={submitting || files.length === 0}
+          >
+            {submitting ? "Processing..." : `Submit ${files.length || ""} file(s)`}
+          </button>
+        </div>
+      </div>
 
-    // Currency
-    const currency =
-        invSection.currency || freight.currency || doc.currency || "";
+      {/* Uploader */}
+      <div className="tw-mb-6 tw-border tw-rounded-xl tw-p-4">
+        <div className="tw-text-base tw-font-medium tw-mb-2">Upload</div>
 
-    // Total charge
-    const totalCharge =
-        invSection.total ??
-        invSection.amount ??
-        freight.freight_amount ??
-        freight.amount ??
-        (typeof invSection.amount === "object"
-            ? invSection.amount.total ?? invSection.amount.subtotal
-            : undefined) ??
-        "";
+        <div
+          ref={dropRef}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          className="tw-border-2 tw-border-dashed tw-rounded-2xl tw-p-6 tw-text-center tw-transition hover:tw-bg-gray-50 tw-cursor-pointer"
+          onClick={() => document.getElementById("file-input")?.click()}
+        >
+          <input id="file-input" type="file" accept=".pdf,image/*" className="tw-hidden" multiple onChange={onPick} />
+          <p className="tw-text-sm">Drag & drop PDF/images here, or click to browse. You can add multiple files.</p>
+          <p className="tw-text-xs tw-text-gray-500 tw-mt-1">
+            PDF, PNG, JPG, WEBP, TIFF • Max {bytes(MAX_BYTES)} per file
+          </p>
+        </div>
 
-    // Dates (for invoice-style docs these are the only dates we have)
-    const departureDate =
-        invSection.issue_date || doc.issue_date || "";
-    const arrivalDate =
-        invSection.due_date || doc.due_date || "";
+        {files.length > 0 && (
+          <div className="tw-mt-4">
+            <div className="tw-text-sm tw-font-medium tw-mb-2">Selected files</div>
+            <ul className="tw-divide-y tw-rounded tw-border">
+              {files.map((f, i) => (
+                <li key={i} className="tw-flex tw-items-center tw-justify-between tw-px-3 tw-py-2">
+                  <div className="tw-min-w-0">
+                    <div className="tw-truncate tw-text-sm tw-font-medium">{f.name}</div>
+                    <div className="tw-text-xs tw-text-gray-500">
+                      {f.type || "unknown"} • {bytes(f.size)}
+                    </div>
+                  </div>
+                  <button
+                    className="tw-text-sm tw-text-red-600 hover:tw-underline"
+                    onClick={() => removeFile(i)}
+                    disabled={submitting}
+                  >
+                    remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
-    // Freight term / Incoterms
-    const freightTerm =
-        freight.incoterms ||
-        doc.shipping_terms ||
-        shipping.freight_term ||
-        "";
+        {error && <div className="tw-mt-4 tw-p-3 tw-rounded-lg tw-bg-red-50 tw-text-red-700 tw-text-sm">{error}</div>}
+      </div>
 
-    // MAWB / AWB if ever present
-    const mawb =
-        doc.mawb_no ||
-        freight.mawb_no ||
-        shipping.mawb_no ||
-        doc.awb_no ||
-        doc.air_waybill_no ||
-        doc.airway_bill_no ||
-        "";
+      {/* Results */}
+      {rows.length > 0 && (
+        <div className="tw-border tw-rounded-xl tw-overflow-hidden" style={{ minHeight: "50vh" }}>
+          <div className="tw-overflow-x-auto" style={{ minHeight: "50vh" }}>
+            <table className="tw-min-w-full tw-text-sm">
+              <thead className="tw-bg-gray-50">
+                <tr className="tw-text-left">
+                  <th className="tw-px-3 tw-py-2">Actions</th>
+                  <th className="tw-px-3 tw-py-2">#</th>
+                  <th className="tw-px-3 tw-py-2">File</th>
+                  <th className="tw-px-3 tw-py-2">Status</th>
+                  {JOB_TABLE_FIELDS.map((field) => (
+                    <th key={field} className="tw-px-3 tw-py-2">
+                      {field}
+                    </th>
+                  ))}
+                  <th className="tw-px-3 tw-py-2 tw-text-center">Details</th>
+                </tr>
+              </thead>
 
-    // Airports / ports
-    const airportDeparture =
-        freight.origin || doc.shipping_port || shipping.origin || "";
-    const airportDestination =
-        freight.destination || shipping.destination || "";
+              <tbody className="tw-divide-y">
+                {rows.map((r, i) => (
+                  <React.Fragment key={r.id}>
+                    <tr className="hover:tw-bg-gray-50">
+                      <td className="tw-px-3 tw-py-2">
+                        <div className="dropdown d-inline-block" style={{ position: "relative" }}>
+                          <button
+                            className="btn btn-outline-secondary btn-sm dropdown-toggle"
+                            type="button"
+                            onClick={() => setOpenDropdown(openDropdown === i ? null : i)}
+                            aria-expanded={openDropdown === i}
+                          >
+                            Convert
+                          </button>
 
-    // Weight & pieces
-    const grossWeight =
-        freight.gross_weight ??
-        shipping.gross_weight ??
-        shippingWeight.gross_weight ??
-        "";
-    const pieces =
-        freight.packages ??
-        shipping.packages ??
-        shippingDims.pieces ??
-        "";
+                          {openDropdown === i && (
+                            <ul
+                              className="dropdown-menu show"
+                              style={{
+                                position: "absolute",
+                                top: "100%",
+                                left: 0,
+                                zIndex: 1000,
+                                display: "block",
+                                minWidth: "240px",
+                                maxWidth: "360px",
+                                whiteSpace: "normal",
+                              }}
+                            >
+                              <li>
+                                <button
+                                  className="dropdown-item"
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenDropdown(null);
+                                  console.log("AirInbound convert payload:", r?.raw?.jobCreation);
+                                    const mapped = mapSchemaToAirInboundEditData(r.raw?.jobCreation || null);
+                                    setEditDataAirInbound(mapped);
+                                  setTimeout(() => openBootstrapModalById("createInboundJobcreationModal"), 0);
+                                  }}
+                                >
+                                  Convert to air-inbound job creation
+                                </button>
+                              </li>
 
-    // ---- Shipper / Consignee / Notify logic (for these types of docs) ----
-    // For your newest JSON:
-    //   vendor  = LOM LOGISTICS INDIA PRIVATE LIMITED (your office)
-    //   buyer   = DAEWON KANG UP CO LTD (customer)
-    //   shipping.shipper = LOM LOGISTICS INDIA PRIVATE LIMITED (same as vendor)
-    //
-    // So:
-    //   shipperName   = shipping.shipper || vendor.name
-    //   consigneeName = buyer.name
-    //   notify        = consignee
-    const shipperName = shipping.shipper || vendor.name || "";
-    const shipperAddress =
-        shipping.shipper_address || vendor.address || "";
+                              <li>
+                                <button
+                                  className="dropdown-item"
+                                  type="button"
+                                  data-bs-toggle="modal"
+                                  data-bs-target="#createOutboundJobcreationModal"
+                                  onClick={() => {
+                                    setOpenDropdown(null);
+                                    const mapped = mapSchemaToAirOutboundEditData(r.raw?.jobCreation || null);
+                                    setEditDataAirOutbound(mapped);
+                                  }}
+                                >
+                                  Convert to air-outbound job creation
+                                </button>
+                              </li>
 
-    const consigneeName = buyer.name || "";
-    const consigneeAddress = buyer.address || "";
+                              <li>
+                                <button
+                                  className="dropdown-item"
+                                  type="button"
+                                  data-bs-toggle="modal"
+                                  data-bs-target="#seainCreateJobModal"
+                                  onClick={() => {
+                                    setOpenDropdown(null);
+                                const mapped = mapSchemaToSeaInboundEditData(r.raw?.jobCreation || null);
+                                setEditDataSeaInbound(mapped);
+                                  }}
+                                >
+                                  Convert to sea-inbound job creation
+                                </button>
+                              </li>
 
-    const notifyName = consigneeName;
-    const notifyAddress = consigneeAddress;
+                              <li>
+                                <button
+                                  className="dropdown-item"
+                                  type="button"
+                                  data-bs-toggle="modal"
+                                  data-bs-target="#seaoutCreateJobModal"
+                                  onClick={() => {
+                                    setOpenDropdown(null);
+                                const mapped = mapSchemaToSeaOutboundEditData(r.raw?.jobCreation || null);
+                                setEditDataSeaOutbound(mapped);
+                                  }}
+                                >
+                                  Convert to sea-outbound job creation
+                                </button>
+                              </li>
 
-    // ---- Map into job object ----
-    return {
-        ...initial,
+                              {/* Temporarily hidden convert options */}
+                              {/* <li>
+                                <button
+                                  className="dropdown-item"
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenDropdown(null);
+                                    navigate("/sales-invoice", { state: { invoiceData: r } });
+                                  }}
+                                >
+                                  Convert to Sales
+                                </button>
+                              </li>
 
-        jobNo: safe(jobNo),
-        mawbNo: safe(mawb),
-        airWayBill: safe(mawb),
-
-        shipperName: safe(shipperName),
-        shipperAddress: safe(shipperAddress),
-
-        consigneeName: safe(consigneeName),
-        consigneeAddress: safe(consigneeAddress),
-
-        notifyName: safe(notifyName),
-        notifyAddress: safe(notifyAddress),
-
-        // vendor is your own address -> agentAddress
-        agentAddress: safe(vendor.address),
-
-        currency: safe(currency),
-        totalCharge: safe(totalCharge),
-
-        departureDate: safe(departureDate),
-        arrivalDate: safe(arrivalDate),
-
-        freightTerm: safe(freightTerm),
-
-        airportDeparture: safe(airportDeparture),
-        airportDestination: safe(airportDestination),
-
-        flightNo: safe(
-            freight.flight_no || shipping.flight_no || doc.flight_no || ""
-        ),
-
-        pieces: safe(pieces),
-        grossWeight: safe(grossWeight),
-    };
-}
-
-/** MAIN COMPONENT ******************************************************/
-// Static default data for job creation conversions
-const defaultAirInboundData = {
-    jobNo: "JOB-AI-001",
-    blType: "Master B/L",
-    consol: "Consol",
-    importType: "Import",
-    mawbNo: "MAWB12345",
-    shipment: "CIF",
-    status: "Open",
-    branch: "HEAD OFFICE",
-    shipperName: "ABC GLOBAL EXPORTS LTD",
-    shipperAddress: "123 EXPORT STREET\nSUITE 500, BUSINESS DISTRICT\nSINGAPORE 018956\nTEL: +65 6123 4567",
-    airWayBill: "AWB-SGP-789456",
-    agentAddress: "LOM LOGISTICS SINGAPORE\n45 CHANGI AIRPORT ROAD\nSINGAPORE 819642",
-    consigneeName: "LOM LOGISTICS INDIA PVT LTD",
-    consigneeAddress: "NO.151, VILLAGE ROAD, 7TH FLOOR,\nGEE GEE EMERALD BUILDING, NUNGAMBAKKAM,\nCHENNAI - 600034 , TAMILNADU- INDIA\nTEL: 044 66455913 FAX: 044 66455913",
-    notifyName: "LOM LOGISTICS INDIA PVT LTD",
-    notifyAddress: "NO.151, VILLAGE ROAD, 7TH FLOOR,\nGEE GEE EMERALD BUILDING, NUNGAMBAKKAM,\nCHENNAI - 600034 , TAMILNADU- INDIA",
-    issuingAgent: "LOM LOGISTICS SINGAPORE",
-    iataCode: "LOM-SGP",
-    accountNo: "ACC-12345",
-    airportDeparture: "SIN - SINGAPORE",
-    to1: "MAA",
-    by1: "SINGAPORE AIRLINES",
-    airportDestination: "MAA - CHENNAI",
-    flightNo: "SQ-678",
-    departureDate: "2025-02-01",
-    arrivalDate: "2025-02-02",
-    handlingInfo: "HANDLE WITH CARE\nPERISHABLE GOODS",
-    accountingInfo: "FREIGHT PREPAID\nCHARGES COLLECT",
-    currency: "USD",
-    code: "PP",
-    wtvalPP: "150.00",
-    coll1: "50.00",
-    otherPP: "25.00",
-    coll2: "30.00",
-    rto1: "MAA",
-    rby1: "SG",
-    rto2: "BOM",
-    rby2: "AI",
-    declaredCarriage: "N.V.D",
-    declaredCustoms: "NVC",
-    insurance: "NIL",
-    freightTerm: "PREPAID",
-    pieces: "10",
-    grossWeight: "250.50",
-    kgLb: "KG",
-    rateClass: "Q",
-    chargeableWeight: "300.00",
-    rateCharge: "5.50",
-    arranged: false,
-    totalCharge: "1650.00",
-    natureGoods: "ELECTRONIC COMPONENTS\nPACKED IN CARTONS",
-    weightPrepaid: "1500.00",
-    weightCollect: "150.00",
-    valuationPrepaid: "50.00",
-    valuationCollect: "0.00",
-    taxPrepaid: "0.00",
-    taxCollect: "0.00",
-    agentPrepaid: "25.00",
-    agentCollect: "30.00",
-    carrierPrepaid: "0.00",
-    carrierCollect: "0.00",
-    totalPrepaid: "1575.00",
-    totalCollect: "180.00",
-    executedDate: "2025-02-01",
-    placeAt: "CHENNAI",
-    signature: "LOM TECHNOLOGY",
-};
-
-const defaultAirOutboundData = {
-    jobNo: "JOB-AO-001",
-    blType: "Master B/L",
-    consol: "Consol",
-    exportType: "Export",
-    mawbNo: "MAWB67890",
-    shipment: "FOB",
-    status: "Open",
-    branch: "HEAD OFFICE",
-    shipperName: "LOM LOGISTICS INDIA PVT LTD",
-    shipperAddress: "NO.151, VILLAGE ROAD, 7TH FLOOR,\nGEE GEE EMERALD BUILDING, NUNGAMBAKKAM,\nCHENNAI - 600034 , TAMILNADU- INDIA\nTEL: 044 66455913 FAX: 044 66455913",
-    airWayBill: "AWB-IND-456789",
-    consigneeName: "XYZ INTERNATIONAL IMPORTS INC",
-    consigneeAddress: "789 IMPORT AVENUE\nFLOOR 12, TRADE CENTER\nNEW YORK, NY 10001, USA\nTEL: +1 212 555 7890",
-    notifyName: "XYZ INTERNATIONAL IMPORTS INC",
-    notifyAddress: "789 IMPORT AVENUE\nFLOOR 12, TRADE CENTER\nNEW YORK, NY 10001, USA",
-    issuingAgent: "LOM LOGISTICS INDIA PVT LTD",
-    iataCode: "LOM-IND",
-    accountNo: "ACC-67890",
-    airportDeparture: "MAA - CHENNAI",
-    to1: "JFK",
-    by1: "AIR INDIA",
-    airportDestination: "JFK - NEW YORK",
-    flightNo: "AI-102",
-    departureDate: "2025-02-01",
-    arrivalDate: "2025-02-02",
-    handlingInfo: "FRAGILE\nEXPORT PACKAGING",
-    accountingInfo: "FREIGHT COLLECT\nCHARGES PREPAID",
-    currency: "USD",
-    code: "CC",
-    wtvalPP: "0.00",
-    coll1: "200.00",
-    otherPP: "0.00",
-    coll2: "75.00",
-    rto1: "JFK",
-    rby1: "AI",
-    rto2: "LAX",
-    rby2: "UA",
-    declaredCarriage: "N.V.D",
-    declaredCustoms: "NVC",
-    insurance: "NIL",
-    freightTerm: "COLLECT",
-    pieces: "20",
-    grossWeight: "450.75",
-    kgLb: "KG",
-    rateClass: "Q",
-    chargeableWeight: "500.00",
-    rateCharge: "6.25",
-    arranged: false,
-    totalCharge: "3125.00",
-    natureGoods: "TEXTILE PRODUCTS\nGARMENTS PACKED IN CARTONS",
-    weightPrepaid: "0.00",
-    weightCollect: "2750.00",
-    valuationPrepaid: "0.00",
-    valuationCollect: "0.00",
-    taxPrepaid: "0.00",
-    taxCollect: "0.00",
-    agentPrepaid: "0.00",
-    agentCollect: "200.00",
-    carrierPrepaid: "0.00",
-    carrierCollect: "175.00",
-    totalPrepaid: "0.00",
-    totalCollect: "3125.00",
-    executedDate: "2025-02-01",
-    placeAt: "CHENNAI",
-    signature: "LOM TECHNOLOGY",
-};
-
-const defaultSeaInboundData = {
-    jobNo: "JOB-SI-001",
-    blType: "Master B/L",
-    consol: "Consol",
-    mblNo: "MBL12345",
-    shipment: "CIF",
-    status: "Open",
-    branch: "HEAD OFFICE",
-    shipperName: "SEA EXPORTS GMBH",
-    shipperAddress: "456 HARBOR STREET\nPORT OF HAMBURG\nHAMBURG 20459, GERMANY\nTEL: +49 40 1234 5678",
-    consigneeName: "LOM LOGISTICS INDIA PVT LTD",
-    consigneeAddress: "NO.151, VILLAGE ROAD, 7TH FLOOR,\nGEE GEE EMERALD BUILDING, NUNGAMBAKKAM,\nCHENNAI - 600034 , TAMILNADU- INDIA\nTEL: 044 66455913 FAX: 044 66455913",
-    notifyName: "LOM LOGISTICS INDIA PVT LTD",
-    notifyAddress: "NO.151, VILLAGE ROAD, 7TH FLOOR,\nGEE GEE EMERALD BUILDING, NUNGAMBAKKAM,\nCHENNAI - 600034 , TAMILNADU- INDIA",
-    onBoardDate: "2025-02-01",
-    arrivalDate: "2025-02-15",
-    precarriageBy: "N.A",
-    portDischarge: "CHENNAI PORT",
-    freightTerm: "PREPAID",
-    shippingTerm: "DOOR TO DOOR",
-    blNo: "BL-SI-12345",
-    blText: "TO ORDER",
-    forDeliveryApplyTo: "LOM LOGISTICS INDIA PVT LTD",
-    forDeliveryApplyTo2: "CHENNAI",
-    placeReceipt: "HAMBURG, GERMANY",
-    portLoading: "HAMBURG PORT",
-    placeDelivery: "CHENNAI",
-    finalDestination: "CHENNAI",
-    vesselName: "MV OCEAN STAR",
-    voy: "V-123",
-    callSign: "CALL-ABC",
-    package: "100",
-    unitPkg: "BALES",
-    grossWeight: "15000.00",
-    unitWeight: "Kgs",
-    measurement: "45.50",
-    unitCbm: "CBM",
-    containers: [
-        {
-            containerNo: "CONTAINER-1234567",
-            size: "20 HC",
-            term: "CFS/CFS",
-            wgt: "15000.00",
-            pkg: "100",
-            sealNo: "SEAL-789",
-        },
-    ],
-    markNumbers: "MK-001/MK-002/MK-003",
-    descShort: '"SAID TO CONTAIN"',
-    descLong: "MACHINERY PARTS AND EQUIPMENT\nPACKED IN WOODEN CRATES",
-    freightPayable: "AT DESTINATION",
-    originalBL: "3",
-    place: "CHENNAI",
-    dateOfIssue: "2025-02-01",
-};
-
-const defaultSeaOutboundData = {
-    jobNo: "JOB-SO-001",
-    mblNo: "MBL67890",
-    blType: "Master B/L",
-    consol: "Consol",
-    shipment: "FOB",
-    status: "Open",
-    branch: "HEAD OFFICE",
-    shipperName: "INDIA EXPORTS PVT LTD",
-    shipperAddress: "789 EXPORT ZONE\nINDUSTRIAL AREA\nMUMBAI 400001, INDIA\nTEL: +91 22 2345 6789",
-    consigneeName: "AMERICAN IMPORT COMPANY LLC",
-    consigneeAddress: "321 CARGO BOULEVARD\nSUITE 200, PORT AREA\nLOS ANGELES, CA 90001, USA\nTEL: +1 310 555 3210",
-    notifyName: "AMERICAN IMPORT COMPANY LLC",
-    notifyAddress: "321 CARGO BOULEVARD\nSUITE 200, PORT AREA\nLOS ANGELES, CA 90001, USA",
-    onBoardDate: "2025-02-01",
-    arrivalDate: "2025-02-15",
-    precarriageBy: "N.A",
-    portDischarge: "LOS ANGELES PORT",
-    freightTerm: "COLLECT",
-    shippingTerm: "CY TO CY",
-    blNo: "BL-SO-67890",
-    blText: "TO ORDER",
-    forDeliveryApplyTo: "AMERICAN IMPORT COMPANY LLC",
-    forDeliveryApplyTo2: "LOS ANGELES",
-    placeReceipt: "MUMBAI, INDIA",
-    portLoading: "MUMBAI PORT",
-    placeDelivery: "LOS ANGELES",
-    finalDestination: "LOS ANGELES",
-    vesselName: "MV PACIFIC EXPRESS",
-    voy: "V-456",
-    callSign: "CALL-XYZ",
-    package: "200",
-    unitPkg: "BALES",
-    grossWeight: "25000.00",
-    unitWeight: "Kgs",
-    measurement: "75.25",
-    unitCbm: "CBM",
-    containers: [
-        {
-            containerNo: "CONTAINER-7654321",
-            size: "40 HC",
-            term: "CY/CY",
-            wgt: "25000.00",
-            pkg: "200",
-            sealNo: "SEAL-456",
-        },
-    ],
-    markNumbers: "EXP-001/EXP-002/EXP-003",
-    descShort: '"SAID TO CONTAIN"',
-    descLong: "TEXTILE PRODUCTS AND GARMENTS\nPACKED IN CARTONS",
-    freightPayable: "AT ORIGIN",
-    originalBL: "3",
-    place: "CHENNAI",
-    dateOfIssue: "2025-02-01",
-};
-
-export default function AirInboundJobFromInvoice() {
-    const [file, setFile] = useState(null);
-    const [jobValues, setJobValues] = useState(initialJobValues);
-    const [rawResponse, setRawResponse] = useState("");
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState("");
-    const [parseStatus, setParseStatus] = useState("");
-
-    const [files, setFiles] = useState([]);
-    const [flowUrl, setFlowUrl] = useState(ANALYZE_URL);
-    const [submitting, setSubmitting] = useState(false);
-
-    const [responses, setResponses] = useState([]);
-    const [raw, setRaw] = useState("");
-    const [expanded, setExpanded] = useState({});
-    const [rowSubmitting, setRowSubmitting] = useState({});
-    const [openDropdown, setOpenDropdown] = useState(null);
-    const [showAirInboundModal, setShowAirInboundModal] = useState(false);
-    const [editDataAirInbound, setEditDataAirInbound] = useState(null);
-    const [editDataAirOutbound, setEditDataAirOutbound] = useState(null);
-    const [editDataSeaInbound, setEditDataSeaInbound] = useState(null);
-    const [editDataSeaOutbound, setEditDataSeaOutbound] = useState(null);
-    const navigate = useNavigate();
-    const dropRef = useRef(null);
-
-
-
-
-
-    const handleFileChange = (e) => {
-        const f = e.target.files?.[0];
-        if (!f) {
-            setFile(null);
-            return;
-        }
-
-        if (!ALLOWED_TYPES.has(f.type)) {
-            alert(`Unsupported type: ${f.type || "(unknown)"} for "${f.name}"`);
-            return;
-        }
-        if (f.size > MAX_BYTES) {
-            alert(
-                `"${f.name}" is too large (${bytes(
-                    f.size
-                )}). Max allowed is ${bytes(MAX_BYTES)}.`
-            );
-            return;
-        }
-
-        setFile(f);
-        setError("");
-        setParseStatus("");
-    };
-
-    const handleAnalyze = async () => {
-        if (!file) {
-            setError("Please select a PDF or image.");
-            return;
-        }
-
-        setLoading(true);
-        setError("");
-        setRawResponse("");
-        setParseStatus("");
-
-        try {
-            const fd = new FormData();
-            fd.append("file", file);
-
-            // Attach Authorization header if token exists
-            const token = sessionStorage.getItem("token");
-            const res = await fetch(ANALYZE_URL, {
-                method: "POST",
-                body: fd,
-                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-            });
-
-            const text = await res.text();
-            setRawResponse(text);
-            console.log("FastAPI /analyze raw response:", text);
-
-            if (!res.ok) {
-                throw new Error(`API error ${res.status}: ${text}`);
-            }
-
-            // 1) Parse top-level JSON
-            let data;
-            try {
-                data = JSON.parse(text);
-            } catch (e) {
-                console.error("Failed to JSON.parse whole response", e);
-                setParseStatus("❌ Failed to parse top-level JSON");
-                return;
-            }
-
-            const result = data.result || {};
-            let invoiceObj = result.parsed;
-
-            // 2) If parsed is null, salvage from result.raw
-            if (!invoiceObj) {
-                const salvaged = safeParseInvoiceRaw(result.raw);
-                if (!salvaged) {
-                    setParseStatus("❌ Failed to parse result.raw as JSON");
-                    return;
-                }
-                invoiceObj = salvaged;
-                setParseStatus("✅ Parsed invoice from result.raw");
-            } else {
-                setParseStatus("✅ Used result.parsed");
-            }
-
-            console.log("Parsed invoiceObj:", invoiceObj);
-            const mappedJob = mapInvoiceToJobFromRaw(
-                initialJobValues,
-                invoiceObj
-            );
-            setJobValues(mappedJob);
-        } catch (err) {
-            console.error(err);
-            setError(err.message || "Failed to analyze file");
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const requiredFields = [
-        "jobNo",
-        "blType",
-        "consol",
-        "importType",
-        "status",
-        "branch",
-        "mawbNo",
-        "airWayBill",
-
-        "shipperName",
-        "shipperAddress",
-        "consigneeName",
-        "consigneeAddress",
-        "notifyName",
-        "notifyAddress",
-
-        "currency",
-        "totalCharge",
-        "departureDate",
-        "arrivalDate",
-        "freightTerm",
-    ];
-
-
-
-
-    const staticInvoiceData = [
-        {
-            id: "static-1",
-            idx: 0,
-            sourceFile: "SampleInvoice.pdf",
-            status: "Success",
-            invoiceNumber: "INV-001",
-            vendorName: "Demo Vendor",
-            vendorAddress: "123 Demo Street",
-            invoiceDate: "2025-12-01",
-            dueDate: "2025-12-15",
-            invoiceTotal: 1000,
-            amountDue: 0,
-            currency: "INR",
-            raw: {
-                invoice: {
-                    lineItems: [
-                        {
-                            ITEMS: "Item 1",
-                            hsnCode: "1234",
-                            descriptionOfGoods: "Demo Product",
-                            quantity: 2,
-                            unitPrice: 500,
-                            amount: 1000,
-                            gst: 18,
-                            taxAmount: 180,
-                        },
-                    ],
-                },
-            },
-        },
-    ];
-    const invoices = [];
-    const invoiceData = staticInvoiceData;
-
-    return (
-        <>
-            <div
-                style={{
-                    padding: "1.5rem",
-                    maxWidth: 1200,
-                    margin: "0 auto",
-                    fontFamily:
-                        "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-                }}
-            >
-                <h2
-                    style={{
-                        fontSize: "1.6rem",
-                        fontWeight: 600,
-                        marginBottom: "0.5rem",
-                    }}
-                >
-                    Job Creation – Air Inbound (Invoice → Job Auto-Fill)
-                </h2>
-                <p style={{ marginBottom: "1.5rem", color: "#4b5563", fontSize: 14 }}>
-                    Upload an invoice PDF or image. It will be sent to{" "}
-                    <code>{ANALYZE_URL}</code>, parsed from <code>result.raw</code>, and
-                    mapped into your Air Inbound job fields.
-                </p>
-
-                {/* Upload card */}
-                <div
-                    style={{
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 12,
-                        padding: 16,
-                        marginBottom: 16,
-                        background: "#f9fafb",
-                    }}
-                >
-                    <div style={{ marginBottom: 8, fontWeight: 500 }}>Upload invoice</div>
-                    <input
-                        type="file"
-                        accept=".pdf,image/*"
-                        onChange={handleFileChange}
-                        style={{ marginBottom: 8 }}
-                    />
-                    {file && (
-                        <div
-                            style={{
-                                fontSize: 12,
-                                color: "#6b7280",
-                                marginBottom: 8,
-                            }}
-                        >
-                            Selected: <strong>{file.name}</strong> ({bytes(file.size)})
+                              <li>
+                                <button
+                                  className="dropdown-item"
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenDropdown(null);
+                                    navigate("/purchases", { state: { invoiceData: r } });
+                                  }}
+                                >
+                                  Purchase
+                                </button>
+                              </li> */}
+                            </ul>
+                          )}
                         </div>
+                      </td>
+
+                      <td className="tw-px-3 tw-py-2">{i + 1}</td>
+
+                      <td className="tw-px-3 tw-py-2 tw-truncate tw-max-w-[240px]" title={r.fileName}>
+                        {r.fileName}
+                      </td>
+
+                      <td
+                        className={classNames(
+                          "tw-px-3 tw-py-2",
+                          r.status === "Success" ? "tw-text-green-600" : "tw-text-red-600"
+                        )}
+                      >
+                        {r.status}
+                      </td>
+
+                      {JOB_TABLE_FIELDS.map((field) => (
+                        <td key={field} className="tw-px-3 tw-py-2">
+                          {r[field]}
+                        </td>
+                      ))}
+
+                      <td className="tw-px-3 tw-py-2 tw-text-center">
+                        <button
+                          className="tw-px-2 tw-py-1 tw-rounded tw-border tw-bg-white hover:tw-bg-gray-50"
+                          onClick={() => setExpanded((p) => ({ ...p, [r.idx]: !p[r.idx] }))}
+                          type="button"
+                        >
+                          {expanded[r.idx] ? "Hide" : "View"}
+                        </button>
+                      </td>
+                    </tr>
+
+                    {expanded[r.idx] && (
+                      <tr className="tw-bg-gray-50/60">
+                        <td className="tw-px-3 tw-py-3" colSpan={4 + JOB_TABLE_FIELDS.length + 1}>
+                          <div className="tw-grid lg:tw-grid-cols-2 tw-gap-6">
+                            <div className="tw-border tw-rounded-lg tw-overflow-hidden">
+                              <div className="tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-bg-white tw-border-b">
+                                jobCreation (schema)
+                              </div>
+                              <pre className="tw-text-xs tw-p-3 tw-overflow-auto tw-max-h-[360px]">
+                                {JSON.stringify(r.raw?.jobCreation ?? null, null, 2)}
+                              </pre>
+                            </div>
+
+                            <div className="tw-border tw-rounded-lg tw-overflow-hidden">
+                              <div className="tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-bg-white tw-border-b">
+                                Backend response (debug)
+                              </div>
+                              <textarea
+                                className="tw-w-full tw-h-64 tw-p-2 tw-text-xs tw-font-mono tw-border-0"
+                                value={r.raw?.rawText || ""}
+                                readOnly
+                              />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                    <button
-                        onClick={handleAnalyze}
-                        disabled={!file || loading}
-                        style={{
-                            padding: "8px 16px",
-                            borderRadius: 8,
-                            border: "none",
-                            background: "#2563eb",
-                            color: "white",
-                            fontSize: 14,
-                            cursor: !file || loading ? "not-allowed" : "pointer",
-                            opacity: !file || loading ? 0.6 : 1,
-                        }}
-                    >
-                        {loading ? "Analyzing..." : "Analyze & Fill Job"}
-                    </button>
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-                    {parseStatus && (
-                        <div
-                            style={{
-                                marginTop: 8,
-                                fontSize: 12,
-                                color: parseStatus.startsWith("✅")
-                                    ? "#15803d"
-                                    : "#b91c1c",
-                            }}
-                        >
-                            {parseStatus}
-                        </div>
-                    )}
-
-                    {error && (
-                        <div
-                            style={{
-                                marginTop: 8,
-                                padding: 10,
-                                borderRadius: 8,
-                                background: "#fee2e2",
-                                color: "#b91c1c",
-                                fontSize: 13,
-                            }}
-                        >
-                            {error}
-                        </div>
-                    )}
-                </div>
-
-                {/* Required fields table */}
-                <div
-                    style={{
-                        border: "1px solid #e5e7eb",
-                        borderRadius: 12,
-                        overflow: "hidden",
-                        marginBottom: 16,
-                        background: "white",
-                    }}
-                >
-                    <div
-                        style={{
-                            padding: 10,
-                            fontWeight: 500,
-                            background: "#f3f4f6",
-                            borderBottom: "1px solid #e5e7eb",
-                        }}
-                    >
-                        Auto-filled Required Job Fields
-                    </div>
-                    <div style={{ overflowX: "auto" }}>
-                        <table
-                            style={{
-                                width: "100%",
-                                fontSize: 14,
-                                borderCollapse: "collapse",
-                            }}
-                        >
-                            <thead>
-                                <tr style={{ background: "#f9fafb" }}>
-                                    <th
-                                        style={{
-                                            textAlign: "left",
-                                            padding: "8px 10px",
-                                            borderBottom: "1px solid #e5e7eb",
-                                        }}
-                                    >
-                                        Field
-                                    </th>
-                                    <th
-                                        style={{
-                                            textAlign: "left",
-                                            padding: "8px 10px",
-                                            borderBottom: "1px solid #e5e7eb",
-                                        }}
-                                    >
-                                        Value (from invoice)
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {requiredFields.map((field) => (
-                                    <tr
-                                        key={field}
-                                        style={{ borderTop: "1px solid #f3f4f6" }}
-                                    >
-                                        <td
-                                            style={{
-                                                padding: "6px 10px",
-                                                fontWeight: 500,
-                                                whiteSpace: "nowrap",
-                                                background: "#ffffff",
-                                            }}
-                                        >
-                                            {field}
-                                        </td>
-                                        <td
-                                            style={{
-                                                padding: "6px 10px",
-                                                whiteSpace: "pre-wrap",
-                                                background: "#ffffff",
-                                            }}
-                                        >
-                                            {String(jobValues[field] ?? "")}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {/* Raw response for debugging */}
-                {rawResponse && (
-                    <div
-                        style={{
-                            border: "1px solid #e5e7eb",
-                            borderRadius: 12,
-                            padding: 12,
-                            background: "#f9fafb",
-                        }}
-                    >
-                        <div style={{ fontWeight: 500, marginBottom: 8 }}>
-                            Raw response
-                        </div>
-                        <textarea
-                            style={{
-                                width: "100%",
-                                height: 220,
-                                fontFamily: "Menlo, monospace",
-                                fontSize: 12,
-                                padding: 8,
-                                borderRadius: 8,
-                                border: "1px solid #d1d5db",
-                            }}
-                            readOnly
-                            value={rawResponse}
-                        />
-                    </div>
-                )}
-            </div>
-
-
-
-            {/* results table */}
-            {invoiceData?.length > 0 && (
-                <div className="border rounded-xl overflow-hidden mx-2">
-                    <div
-                        className="table-responsive"
-                        style={{
-                            minHeight: "60vh",
-                            maxHeight: "60vh",
-                            overflowY: "auto",
-                        }}
-                    >
-                        <table className="table table-sm align-middle mb-0">
-                            <thead className="table-light">
-                                <tr >
-                                    <th className="px-3 py-2 text-left">Actions</th>
-                                    <th className="px-3 py-2">#</th>
-                                    <th className="px-3 py-2">File</th>
-                                    <th className="px-3 py-2">Status</th>
-                                    <th className="px-3 py-2">Invoice #</th>
-                                    <th className="px-3 py-2">Vendor</th>
-                                    <th className="px-3 py-2">Vendor Address</th>
-                                    <th className="px-3 py-2">Invoice Date</th>
-                                    <th className="px-3 py-2">Due Date</th>
-                                    <th className="px-3 py-2 text-right">Total</th>
-                                    <th className="px-3 py-2 text-right">Amount Due</th>
-                                    <th className="px-3 py-2 text-center">Line Items</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {invoiceData?.map((r, i) => (
-                                    <React.Fragment key={i}>
-                                        <tr className="hover:bg-gray-50">
-                                            <td className="px-3 py-2 text-left">
-
-                                                <div className="dropdown d-inline-block ms-2" style={{ position: 'relative' }}>
-                                                    <button
-                                                        className="btn btn-outline-secondary btn-sm dropdown-toggle"
-                                                        type="button"
-                                                        onClick={() => setOpenDropdown(openDropdown === i ? null : i)}
-                                                        aria-expanded={openDropdown === i}
-                                                    >
-                                                        Convert
-                                                    </button>
-                                                    {openDropdown === i && (
-                                                        <ul
-                                                            className="dropdown-menu show"
-                                                            style={{
-                                                                position: 'absolute',
-                                                                top: '100%',
-                                                                left: 0,
-                                                                zIndex: 1000,
-                                                                display: 'block',
-                                                                minWidth: '200px'
-                                                            }}
-                                                        >
-
-                                                            <li>
-                                                                <button
-                                                                    className="dropdown-item"
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setOpenDropdown(null);
-                                                                        setEditDataAirInbound(defaultAirInboundData);
-                                                                        setShowAirInboundModal(true);
-                                                                    }}
-                                                                >
-                                                                    Convert to air-inbound job creation
-                                                                </button>
-                                                            </li>
-                                                            <li>
-                                                                <button
-                                                                    className="dropdown-item"
-                                                                    type="button"
-                                                                    data-bs-toggle="modal"
-                                                                    data-bs-target="#createOutboundJobcreationModal"
-                                                                    onClick={() => {
-                                                                        setOpenDropdown(null);
-                                                                        setEditDataAirOutbound(defaultAirOutboundData);
-                                                                    }}
-                                                                >
-                                                                    Convert to air-outbound job creation
-                                                                </button>
-                                                            </li>
-                                                            <li>
-                                                                <button
-                                                                    className="dropdown-item"
-                                                                    type="button"
-                                                                    data-bs-toggle="modal"
-                                                                    data-bs-target="#seainCreateJobModal"
-                                                                    onClick={() => {
-                                                                        setOpenDropdown(null);
-                                                                        setEditDataSeaInbound(defaultSeaInboundData);
-                                                                    }}
-                                                                >
-                                                                    Convert to sea-inbound job creation
-                                                                </button>
-                                                            </li>
-                                                            <li>
-                                                                <button
-                                                                    className="dropdown-item"
-                                                                    type="button"
-                                                                    data-bs-toggle="modal"
-                                                                    data-bs-target="#seaoutCreateJobModal"
-                                                                    onClick={() => {
-                                                                        setOpenDropdown(null);
-                                                                        setEditDataSeaOutbound(defaultSeaOutboundData);
-                                                                    }}
-                                                                >
-                                                                    Convert to sea-outbound job creation
-                                                                </button>
-                                                            </li>
-                                                            <li>
-                                                                <button
-                                                                    className="dropdown-item"
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setOpenDropdown(null);
-                                                                        navigate("/sales-invoice", { state: { invoiceData: r } });
-                                                                    }}
-                                                                >
-                                                                    Convert to Sales
-                                                                </button>
-                                                            </li>
-                                                            <li>
-                                                                <button
-                                                                    className="dropdown-item"
-                                                                    type="button"
-                                                                    onClick={() => {
-                                                                        setOpenDropdown(null);
-                                                                        navigate("/purchases", { state: { invoiceData: r } });
-                                                                    }}
-                                                                >
-                                                                    Purchase
-                                                                </button>
-                                                            </li>
-                                                        </ul>
-                                                    )}
-                                                </div>
-                                            </td>
-                                            <td className="px-3 py-2">{i + 1}</td>
-                                            <td
-                                                className="px-3 py-2 truncate max-w-[260px]"
-                                                title={r.sourceFile}
-                                            >
-                                                {r.sourceFile}
-                                            </td>
-                                            <td
-                                                className={classNames(
-                                                    "px-3 py-2",
-                                                    r.status === "Success"
-                                                        ? "text-green-600"
-                                                        : "text-red-600"
-                                                )}
-                                            >
-                                                {r.status}
-                                            </td>
-                                            <td className="px-3 py-2">{r.invoiceNumber}</td>
-                                            <td className="px-3 py-2">{r.vendorName}</td>
-                                            <td className="px-3 py-2">{r.vendorAddress}</td>
-                                            <td className="px-3 py-2">{r.invoiceDate}</td>
-                                            <td className="px-3 py-2">{r.dueDate}</td>
-                                            <td className="px-3 py-2 text-right">
-                                                {r.invoiceTotal} {r.currency}
-                                            </td>
-                                            <td className="px-3 py-2 text-right">
-                                                {r.amountDue} {r.currency}
-                                            </td>
-                                            <td className="px-3 py-2 text-center">
-                                                {r.raw?.invoice?.lineItems?.length ?? 0}
-                                            </td>
-                                        </tr>
-
-                                    </React.Fragment>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
-
-            {/* Job Creation Modals */}
-            {/* Air Inbound Modal - Custom Modal (conditional rendering like AirInboundComp) */}
-            {showAirInboundModal && (
-                <JobCreationAirInbound
-                    onClose={() => {
-                        setShowAirInboundModal(false);
-                        setEditDataAirInbound(null);
-                    }}
-                    editData={editDataAirInbound}
-                    setEditData={setEditDataAirInbound}
-                />
-            )}
-
-            {/* Air Outbound Modal - Bootstrap (always in DOM like AirOutboundComp) */}
-            <JobCreationAirOutbound
-                editData={editDataAirOutbound ?? {}}
-                setEditData={setEditDataAirOutbound}
-            />
-
-            {/* Sea Inbound Modal - Bootstrap (always in DOM like OceanInboundComp) */}
-            <JobCreationSeaInbound
-                editData={editDataSeaInbound ?? {}}
-                setEditData={setEditDataSeaInbound}
-            />
-
-            {/* Sea Outbound Modal - Bootstrap (always in DOM like OceanOutboundComp) */}
-            <JobCreationSeaOutbound
-                editData={editDataSeaOutbound ?? {}}
-                setEditData={setEditDataSeaOutbound}
-            />
-        </>
-    );
+      {/* BOOTSTRAP MODALS — always mounted (like InvoiceAgentCopy.jsx) */}
+      <JobCreationAirInbound editData={editDataAirInbound ?? {}} setEditData={setEditDataAirInbound} />
+      <JobCreationAirOutbound editData={editDataAirOutbound ?? {}} setEditData={setEditDataAirOutbound} />
+      <JobCreationSeaInbound editData={editDataSeaInbound ?? {}} setEditData={setEditDataSeaInbound} />
+      <JobCreationSeaOutbound editData={editDataSeaOutbound ?? {}} setEditData={setEditDataSeaOutbound} />
+    </div>
+  );
 }

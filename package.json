@@ -1,14 +1,22 @@
 {
   "name": "lom-book",
   "private": true,
-  "version": "1.0.11",
+  "version": "1.0.22",
   "description": "LOM Book Desktop Application",
   "author": "Sabari",
   "main": "electron/main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev:modeA": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron . --stability-mode=A\"",
+    "dev:modeB": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron . --stability-mode=B\"",
+    "dev:modeC": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron . --stability-mode=C\"",
+    "check:blocking-dialogs": "node scripts/check-blocking-dialogs.js",
+    "prebuild": "npm run check:blocking-dialogs",
     "build": "vite build",
-    "dist": "npm run build && electron-builder",
+    "dist": "npm run check:blocking-dialogs && npm run build && electron-builder",
+    "dist:modeA": "npm run check:blocking-dialogs && npm run build && cross-env LOM_STABILITY_MODE=A electron-builder",
+    "dist:modeB": "npm run check:blocking-dialogs && npm run build && cross-env LOM_STABILITY_MODE=B electron-builder",
+    "dist:modeC": "npm run check:blocking-dialogs && npm run build && cross-env LOM_STABILITY_MODE=C electron-builder",
     "clean": "rimraf dist release"
   },
   "build": {
@@ -100,6 +108,7 @@
     "eslint-plugin-react-refresh": "^0.4.22",
     "globals": "^16.4.0",
     "postcss": "^8.5.6",
+    "cross-env": "^7.0.3",
     "tailwindcss": "^3.4.18",
     "vite": "npm:rolldown-vite@7.1.14",
     "wait-on": "^9.0.1"

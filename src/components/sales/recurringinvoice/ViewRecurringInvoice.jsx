@@ -16,6 +16,8 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 /* ---------------------- No Data Component ------------------------ */
 const NoDataComponent = () => (
@@ -107,10 +109,10 @@ const ViewRecurringInvoice = () => {
 
   const handleDelete = async () => {
     if (selectedRows.length === 0)
-      return alert("Please select at least one recurring invoice.");
+      return notifyInfo("Please select at least one recurring invoice.");
 
-    if (!window.confirm("Are you sure you want to delete selected items?"))
-      return;
+    const confirmed = await confirm("Are you sure you want to delete selected items?");
+    if (!confirmed) return;
 
     try {
       await Promise.all(selectedRows.map((r) => deleteMutation.mutateAsync(r.id)));

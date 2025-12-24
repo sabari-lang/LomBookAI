@@ -13,7 +13,11 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+
 const DayBook = () => {
+    // Report filter form - always unlock on mount
+    
     const [selectedDate, setSelectedDate] = useState(() => {
         const today = new Date();
         return today.toISOString().split("T")[0];
@@ -27,30 +31,6 @@ const DayBook = () => {
     const [showPreview, setShowPreview] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const tempContainer = useRef(null);
-
-    const fallbackRows = useMemo(
-        () => [
-            {
-                id: 1,
-                name: "Ranjith",
-                refNo: "PUR-001",
-                type: "Purchase",
-                total: 17700,
-                moneyIn: 0,
-                moneyOut: 17700,
-            },
-            {
-                id: 2,
-                name: "Raja",
-                refNo: "SAL-002",
-                type: "Sale",
-                total: 25400,
-                moneyIn: 25400,
-                moneyOut: 0,
-            },
-        ],
-        []
-    );
 
     const queryKey = useMemo(() => ["report-daybook", page, perPage], [page, perPage]);
     const { data: fetched, isLoading } = useQuery({
@@ -67,7 +47,7 @@ const DayBook = () => {
     });
     const apiRows = extractItems(fetched);
     const pagination = extractPagination(fetched);
-    const tableRows = apiRows.length > 0 ? apiRows : fallbackRows;
+    const tableRows = apiRows;
     const totalRows = Number.isFinite(pagination.totalCount)
         ? pagination.totalCount
         : tableRows.length;
@@ -175,7 +155,7 @@ const DayBook = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to generate PDF");
+            notifyError("Failed to generate PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);
@@ -231,7 +211,7 @@ const DayBook = () => {
             link.download = `DayBook_${selectedDate}.pdf`;
             link.click();
         }
-        if (action === "email") alert("Email sending not implemented yet!");
+        if (action === "email") notifyInfo("Email sending not implemented yet!");
     };
 
     return (

@@ -8,7 +8,8 @@ import { getItems } from "../../items/api";
 import { extractItems } from "../../../utils/extractItems";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { calculateLineAmount, calculateSubtotal, calculateTaxAmount, calculateGrandTotal, calculateRoundOff, toNumber } from "../../../utils/calculations";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const NewRecurringInvoice = () => {
   const { state } = useLocation();
@@ -66,9 +67,6 @@ const NewRecurringInvoice = () => {
   const editId = state?.id || null;
   const isEditing = Boolean(editId);
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
-
   const [uploadedFiles, setUploadedFiles] = useState([]);
 
   // format dates in edit mode and initialize
@@ -88,6 +86,8 @@ const NewRecurringInvoice = () => {
       reset({ ...DEFAULTS, ...formattedState });
       setUploadedFiles(state?.attachments || []);
       setValue("attachments", state?.attachments || []);
+      // Call refreshKeyboard after form values are populated
+      refreshKeyboard();
       return;
     }
 
@@ -198,7 +198,7 @@ const NewRecurringInvoice = () => {
     mutationFn: createRecurringInvoice,
     onSuccess: () => {
       queryClient.invalidateQueries(["recurringInvoices"]);
-      alert("Recurring Invoice Created!");
+      notifySuccess("Recurring Invoice Created!");
       reset(DEFAULTS);
       navigate("/recurring");
     },
@@ -209,7 +209,7 @@ const NewRecurringInvoice = () => {
     mutationFn: ({ id, payload }) => updateRecurringInvoice(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["recurringInvoices"]);
-      alert("Recurring Invoice Updated!");
+      notifySuccess("Recurring Invoice Updated!");
       navigate("/recurring");
     },
     onError: (err) => handleProvisionalError(err, "Update Recurring Invoice"),

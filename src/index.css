@@ -92,16 +92,19 @@ textarea {
   border: 1px solid #e5e5e5;
   border-radius: 6px;
   overflow-x: auto;
+  min-height: 50vh;
 }
 
 /* 📊 Table */
 .common-table {
   margin-bottom: 0;
-  width: 100%;
-  border-collapse: collapse;
-  /* min-height: 50vh; */
-
 }
+
+/* View table minimum height */
+.view-table-minh {
+  min-height: 50vh;
+}
+
 
 /* Header cells */
 .common-table thead th {
@@ -153,6 +156,13 @@ th .bi-search {
 }
 
 /* TABLE STYLES END */
+
+/* View pages – keep tables tall enough even when data is short */
+.view-table-minh,
+.table-responsive.view-table-minh,
+.common-table-container.view-table-minh {
+  min-height: 50vh;
+}
 
 /* 🟡 Floating collapsed button */
 .assistant-floating-btn {

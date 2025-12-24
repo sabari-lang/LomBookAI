@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useForm, Controller, useFieldArray, useWatch } from "react-hook-form";
+import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createCustomer, updateCustomer } from "../api";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
-import { MOBILE_REQUIRED, onlyDigits } from "../../../utils/validation";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
-import { getCountries, getStatesByCountry } from "../../../utils/geo";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { notifySuccess } from "../../../utils/notifications";
 
 const NewCustomer = () => {
   const { state } = useLocation();
@@ -25,7 +24,6 @@ const NewCustomer = () => {
     customerLanguage: "",
     pan: "",
     gstTreatment: "",
-    gstin: "",
     placeOfSupply: "",
     taxPreference: "",
     currency: "",
@@ -43,7 +41,7 @@ const NewCustomer = () => {
     facebook: "",
     billingAddress: {
       attention: "",
-      country: "IN",
+      country: "",
       street1: "",
       street2: "",
       city: "",
@@ -54,7 +52,7 @@ const NewCustomer = () => {
     },
     shippingAddress: {
       attention: "",
-      country: "IN",
+      country: "",
       street1: "",
       street2: "",
       city: "",
@@ -88,24 +86,51 @@ const NewCustomer = () => {
     formState: { errors },
   } = useForm({
     defaultValues: initialValues,
-    mode: "onBlur",
-    reValidateMode: "onChange",
+    mode: "onChange",
+    shouldUnregister: false, // RHF best practice: keep fields registered to prevent remount issues
   });
 
   const editId = state?.id;
   const isEditing = Boolean(editId);
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
+  // Ref for first text input field (customerType)
+  const firstInputRef = useRef(null);
 
-  // 🔥 FIXED — populate edit mode values using ONLY editId to prevent infinite loop
+  // Time-based guard to prevent StrictMode immediate duplicates (250ms window)
+  // But allows every edit entry (not session-based blocking)
+  const lastResetRef = useRef({ editId: null, timestamp: 0 });
+
+  // RHF best practice: useFieldArray hook must be called before useEffect that uses replace()
+  const { fields: contactFields, append, remove, replace } = useFieldArray({
+    control,
+    name: "contactPersons",
+    // RHF best practice: use replace() or reset({ contactPersons }) instead of repeated setValue
+  });
+
+  // Populate edit mode values using ONLY state + explicit first field focus
   useEffect(() => {
-    if (!editId) {
+    if (!isEditing) {
       reset(initialValues);
+      lastResetRef.current = { editId: null, timestamp: 0 };
       return;
     }
 
+    // Time-based guard: only block immediate duplicates (StrictMode), not next edit
+    const now = Date.now();
+    const lastReset = lastResetRef.current;
+    if (lastReset.editId === editId && (now - lastReset.timestamp) < 250) {
+      return; // Immediate duplicate (StrictMode)
+    }
+
+    lastResetRef.current = { editId, timestamp: now };
+
     if (state) {
+      // Batch form population: single reset() instead of multiple setValue calls
+      // Include ALL nested objects/arrays in reset to prevent remount issues
+      const contactPersons = state?.contactPersons?.length > 0
+        ? state?.contactPersons
+        : initialValues?.contactPersons;
+      
       reset({
         ...initialValues,
         ...state,
@@ -120,48 +145,58 @@ const NewCustomer = () => {
           ...(state?.shippingAddress || {}),
         },
 
-        contactPersons:
-          state?.contactPersons?.length > 0
-            ? state?.contactPersons
-            : initialValues?.contactPersons,
+        contactPersons: contactPersons, // Include in reset
+        documents: state?.documents || initialValues?.documents || [], // Include in reset
+        customFields: state?.customFields || initialValues?.customFields || [], // Include in reset
+        reportingTags: state?.reportingTags || initialValues?.reportingTags || [], // Include in reset
       });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId]);
+      
+      // RHF best practice: use replace() for useFieldArray after reset() to ensure field array is properly updated
+      // This prevents remount issues with useFieldArray
+      if (contactPersons && contactPersons.length > 0) {
+        requestAnimationFrame(() => {
+          replace(contactPersons);
+        });
+      }
 
-  const { fields: contactFields, append, remove } = useFieldArray({
-    control,
-    name: "contactPersons",
-  });
+      // Explicit first field focus on every edit entry (session-based, not just first time)
+      // Use requestAnimationFrame to ensure DOM is ready after reset()
+      requestAnimationFrame(() => {
+        if (firstInputRef.current) {
+          firstInputRef.current.focus();
+          if (typeof window !== 'undefined' && window.localStorage) {
+            try {
+              const enableLogging = localStorage.getItem('debug.keyboard') === 'true';
+              if (enableLogging) {
+                console.log('[Keyboard] First field focused', {
+                  field: 'customerType',
+                  editId,
+                  hasFocus: document.hasFocus(),
+                  visibilityState: document.visibilityState,
+                  targetElement: {
+                    tag: firstInputRef.current.tagName,
+                    type: firstInputRef.current.type || 'N/A',
+                    id: firstInputRef.current.id || 'N/A',
+                    name: firstInputRef.current.name || 'N/A',
+                  },
+                });
+              }
+            } catch (e) {
+              // Ignore logging errors
+            }
+          }
+        }
+      });
+
+      // Call refreshKeyboard after form values are populated (ensures OS focus + soft recovery)
+      refreshKeyboard();
+    }
+  }, [isEditing, editId, state, reset, replace]);
 
   const [activeTab, setActiveTab] = useState("other");
 
-  // Countries & states from shared geo utils
-  const countries = getCountries();
-  
-  // Watch country changes to update states dynamically
-  const billingCountry = useWatch({ control, name: "billingAddress.country" });
-  const shippingCountry = useWatch({ control, name: "shippingAddress.country" });
-  
-  const billingStates = getStatesByCountry(billingCountry);
-  const shippingStates = getStatesByCountry(shippingCountry);
-
-  // Reset state field when country changes
-  useEffect(() => {
-    if (billingCountry && billingStates.length === 0) {
-      // If selected country has no states, clear the state field
-      setValue("billingAddress.state", "", { shouldDirty: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [billingCountry]);
-
-  useEffect(() => {
-    if (shippingCountry && shippingStates.length === 0) {
-      // If selected country has no states, clear the state field
-      setValue("shippingAddress.state", "", { shouldDirty: true });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shippingCountry]);
+  const countries = ["India", "United States", "Germany"];
+  const states = ["Tamil Nadu", "Karnataka", "California"];
 
   const copyBillingToShipping = () => {
     const billing = getValues("billingAddress");
@@ -180,8 +215,9 @@ const NewCustomer = () => {
     mutationFn: (payload) => createCustomer(payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["customers"]);
-      alert("Customer created successfully");
+      notifySuccess("Customer created successfully");
       reset(initialValues);
+      refreshKeyboard();
       navigate("/viewcustomer");
     },
     onError: (error) => handleProvisionalError(error, "Create Customer"),
@@ -191,7 +227,8 @@ const NewCustomer = () => {
     mutationFn: ({ id, payload }) => updateCustomer(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["customers"]);
-      alert("Customer updated successfully");
+      notifySuccess("Customer updated successfully");
+      refreshKeyboard();
       navigate("/viewcustomer");
     },
     onError: (error) => handleProvisionalError(error, "Update Customer"),
@@ -202,8 +239,8 @@ const NewCustomer = () => {
     const payload = {
       ...data,
       // Ensure openingBalance is a number
-      openingBalance: typeof data?.openingBalance === 'number'
-        ? data.openingBalance
+      openingBalance: typeof data?.openingBalance === 'number' 
+        ? data.openingBalance 
         : Number(data?.openingBalance) || 0,
       // Ensure boolean values
       allowPortal: Boolean(data?.allowPortal),
@@ -269,6 +306,10 @@ const NewCustomer = () => {
               render={({ field }) => (
                 <input
                   {...field}
+                  ref={(el) => {
+                    firstInputRef.current = el;
+                    field.ref(el);
+                  }}
                   type="text"
                   className={`form-control ${errors.customerType ? "is-invalid" : ""}`}
                   placeholder="Enter Customer Type"
@@ -449,15 +490,11 @@ const NewCustomer = () => {
             <Controller
               name="mobilePhone"
               control={control}
-              rules={MOBILE_REQUIRED}
+              rules={{ required: "Mobile phone is required" }}
               render={({ field }) => (
                 <input
                   {...field}
                   placeholder="Mobile"
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={10}
-                  onInput={onlyDigits}
                   className={`form-control form-control-sm ${errors.mobilePhone ? "is-invalid" : ""}`}
                 />
               )}
@@ -497,7 +534,6 @@ const NewCustomer = () => {
           {/* Other Details */}
           {activeTab === "other" && (
             <>
-
               <div className="row mb-3">
                 <label className="col-sm-2 col-form-label text-danger">GST Treatment*</label>
                 <div className="col-sm-4">
@@ -523,28 +559,6 @@ const NewCustomer = () => {
                       {errors.gstTreatment.message}
                     </span>
                   )}
-                </div>
-              </div>
-
-              <div className="row mb-3 align-items-center">
-                <label className="col-sm-2 col-form-label">GSTIN / UIN</label>
-                <div className="col-sm-4 d-flex align-items-center gap-2">
-                  <Controller
-                    name="gstin"
-                    control={control}
-                    defaultValue={initialValues.gstin || ""}
-                    render={({ field }) => (
-                      <input
-                        {...field}
-                        className="form-control form-control-sm"
-                        placeholder="Enter GSTIN/UIN (optional)"
-                        maxLength={15}
-                      />
-                    )}
-                  />
-                  {/* <a href="https://services.gst.gov.in/services/searchtp" target="_blank" rel="noopener noreferrer" className="small text-primary ms-2">
-                    Get Taxpayer details
-                  </a> */}
                 </div>
               </div>
 
@@ -647,8 +661,8 @@ const NewCustomer = () => {
                     render={({ field }) => (
                       <select {...field} className="form-select form-select-sm">
                         <option value="">Select an account</option>
-                        <option value="Accounts Receivable">Accounts Receivable</option>
-
+                        <option value="acc1">Accounts Receivable - 1</option>
+                        <option value="acc2">Accounts Receivable - 2</option>
                       </select>
                     )}
                   />
@@ -686,17 +700,13 @@ const NewCustomer = () => {
                         <option>Due on Receipt</option>
                         <option>Net 15</option>
                         <option>Net 30</option>
-                        <option>Net 45</option>
-                        <option>Net 60</option>
-                        <option>Due end of the month</option>
-                        <option>Due end of next month</option>
                       </select>
                     )}
                   />
                 </div>
               </div>
 
-              {/* <div className="row mb-3">
+              <div className="row mb-3">
                 <label className="col-sm-2 col-form-label">Enable Portal?</label>
                 <div className="col-sm-4 d-flex align-items-center">
                   <Controller
@@ -714,7 +724,7 @@ const NewCustomer = () => {
                   />
                   <label className="form-check-label">Allow portal access for this customer</label>
                 </div>
-              </div> */}
+              </div>
 
               <div className="row mb-3">
                 <label className="col-sm-2 col-form-label">Portal Language</label>
@@ -734,7 +744,7 @@ const NewCustomer = () => {
               </div>
 
               {/* Documents, Website, Department, Designation, X, Skype, Facebook */}
-              {/* <div className="row mb-3 align-items-center">
+              <div className="row mb-3 align-items-center">
                 <label className="col-sm-2 col-form-label">Documents</label>
                 <div className="col-sm-6">
                   <input
@@ -759,7 +769,7 @@ const NewCustomer = () => {
                     />
                   </div>
                 </div>
-              </div> */}
+              </div>
 
               <div className="row mb-3">
                 <label className="col-sm-2 col-form-label">Website URL</label>
@@ -852,18 +862,11 @@ const NewCustomer = () => {
                         name={`billingAddress.${fieldKey}`}
                         control={control}
                         render={({ field }) =>
-                          fieldKey === "country" ? (
+                          fieldKey === "country" || fieldKey === "state" ? (
                             <select {...field} className="form-select form-select-sm">
                               <option value="">Select</option>
-                              {countries.map((country) => (
-                                <option key={country.code} value={country.code}>{country.name}</option>
-                              ))}
-                            </select>
-                          ) : fieldKey === "state" ? (
-                            <select {...field} className={`form-select form-select-sm ${billingStates.length === 0 ? "disabled" : ""}`} disabled={billingStates.length === 0}>
-                              <option value="">Select</option>
-                              {billingStates.map((state) => (
-                                <option key={state.code} value={state.code}>{state.name}</option>
+                              {(fieldKey === "country" ? countries : states).map((val) => (
+                                <option key={val}>{val}</option>
                               ))}
                             </select>
                           ) : fieldKey === "street1" || fieldKey === "street2" ? (
@@ -912,18 +915,11 @@ const NewCustomer = () => {
                         name={`shippingAddress.${fieldKey}`}
                         control={control}
                         render={({ field }) =>
-                          fieldKey === "country" ? (
+                          fieldKey === "country" || fieldKey === "state" ? (
                             <select {...field} className="form-select form-select-sm">
                               <option value="">Select</option>
-                              {countries.map((country) => (
-                                <option key={country.code} value={country.code}>{country.name}</option>
-                              ))}
-                            </select>
-                          ) : fieldKey === "state" ? (
-                            <select {...field} className={`form-select form-select-sm ${shippingStates.length === 0 ? "disabled" : ""}`} disabled={shippingStates.length === 0}>
-                              <option value="">Select</option>
-                              {shippingStates.map((state) => (
-                                <option key={state.code} value={state.code}>{state.name}</option>
+                              {(fieldKey === "country" ? countries : states).map((val) => (
+                                <option key={val}>{val}</option>
                               ))}
                             </select>
                           ) : fieldKey === "street1" || fieldKey === "street2" ? (

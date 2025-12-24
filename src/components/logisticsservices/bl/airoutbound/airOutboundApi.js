@@ -206,14 +206,18 @@ export const updateAirOutboundProvisional = async (jobNo, hawbNo, data) => {
     }
 };
 
-export const deleteAirOutboundProvisional = async (id) => {
+// Delete Provisional Entry (uses composite key: jobNo + hawb)
+export const deleteAirOutboundProvisional = async (jobNo, hawb) => {
     try {
-        // TODO: Verify backend route - may need jobNo and hawb instead of just id
-        const response = await logisticsApi.delete(`/air-outbound/houses/provisional/${id}`);
+        if (!jobNo || !hawb) {
+            throw new Error("jobNo and hawb are required for deleting Air Outbound provisionals");
+        }
+        const url = `/air-outbound/houses/job/${jobNo}/hawb/${hawb}/accounting/provisional`;
+        const response = await logisticsApi.delete(url);
         return response.data;
     } catch (error) {
-        console.error(`Error deleting Air Outbound Provisional ID ${id}:`, error);
-        return null;
+        console.error(`Error deleting Air Outbound provisional (jobNo: ${jobNo}, hawb: ${hawb}):`, error);
+        throw error;
     }
 };
 
@@ -354,14 +358,19 @@ export const updateAirOutboundVendorAccount = async (jobNo, hawbNo, payload) => 
 };
 
 
-export const deleteAirOutboundVendorAccount = async (id) => {
+// Delete Vendor Accounting Entry (uses composite key: jobNo + hawb)
+export const deleteAirOutboundVendorAccount = async (jobNo, hawb) => {
     try {
-        // TODO: Verify backend route - may need jobNo and hawb instead of just id
-        const response = await logisticsApi.delete(`/air-outbound/houses/accounting/vendor/${id}`);
+        if (!jobNo || !hawb) {
+            throw new Error("jobNo and hawb are required for deleting Air Outbound vendor accounting");
+        }
+        const response = await logisticsApi.delete(
+            `/air-outbound/houses/job/${jobNo}/hawb/${hawb}/accounting/vendor-accounting-entry`
+        );
         return response.data;
     } catch (error) {
-        console.error(`Error deleting Air Outbound Vendor Account ID ${id}:`, error);
-        return null;
+        console.error(`Error deleting Air Outbound Vendor Account (jobNo: ${jobNo}, hawb: ${hawb}):`, error);
+        throw error;
     }
 };
 

@@ -7,6 +7,8 @@ import { handleProvisionalError } from "../../utils/handleProvisionalError";
 import { extractItems } from "../../utils/extractItems";
 import { extractPagination } from "../../utils/extractPagination";
 import EmptyStateMessage from "../common/emptytable/EmptyStateMessage";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
+import { confirm } from "../../utils/confirm";
 
 const Banking = () => {
     const navigate = useNavigate();
@@ -49,11 +51,12 @@ const Banking = () => {
     // Handle delete
     const handleDelete = async () => {
         if (selectedRows.length === 0) {
-            alert("Please select bank accounts to delete.");
+            notifyInfo("Please select bank accounts to delete.");
             return;
         }
 
-        if (!window.confirm("Are you sure you want to delete selected bank accounts?")) return;
+        const confirmed = await confirm("Are you sure you want to delete selected bank accounts?");
+    if (!confirmed) return;
 
         const idsToDelete = selectedRows.map((r) => r?.id || r?._id).filter(Boolean);
         if (idsToDelete.length === 0) return;

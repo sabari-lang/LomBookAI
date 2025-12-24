@@ -10,7 +10,8 @@ import { useQuery } from "@tanstack/react-query";
 
 import { createPaymentReceived, updatePaymentReceived } from "../api";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 // Default values including all fields requested
 const DEFAULTS = {
@@ -48,9 +49,6 @@ const RecordPayment = () => {
 
   const editId = state?.id;
   const isEditing = Boolean(editId);
-
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
 
   const [activeTab, setActiveTab] = useState("invoice"); // "invoice" | "advance"
   const {
@@ -109,6 +107,8 @@ const RecordPayment = () => {
         setUploadedFiles(merged.attachments);
         setValue("attachments", merged.attachments);
       }
+      // Call refreshKeyboard after form values are populated
+      refreshKeyboard();
       return;
     }
 
@@ -147,7 +147,7 @@ const RecordPayment = () => {
     mutationFn: (payload) => createPaymentReceived(payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["paymentsReceived"]);
-      alert("Payment recorded successfully");
+      notifySuccess("Payment recorded successfully");
       reset(DEFAULTS);
       setUploadedFiles([]);
       setValue("attachments", []);
@@ -160,7 +160,7 @@ const RecordPayment = () => {
     mutationFn: ({ id, payload }) => updatePaymentReceived(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["paymentsReceived"]);
-      alert("Payment updated successfully");
+      notifySuccess("Payment updated successfully");
       navigate("/payments");
     },
     onError: (error) => handleProvisionalError(error, "Update Payment"),

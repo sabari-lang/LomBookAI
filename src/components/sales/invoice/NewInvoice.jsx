@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import moment from "moment/moment";
 import { useForm, Controller, useFieldArray, useWatch } from "react-hook-form";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -8,8 +8,8 @@ import { getItems } from "../../items/api";
 import { extractItems } from "../../../utils/extractItems";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { calculateLineAmount, calculateSubtotal, calculateTaxAmount, calculateGrandTotal, toNumber, parseTaxPercentage } from "../../../utils/calculations";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
-import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { notifySuccess } from "../../../utils/notifications";
 
 const NewInvoice = () => {
   const { state } = useLocation();
@@ -20,9 +20,9 @@ const NewInvoice = () => {
     customerName: "",
     invoiceNumber: "INV-000001",
     orderNumber: "",
-    invoiceDate: new Date().toISOString().split("T")[0], // today
-    dueDate: null, // set to null if not present
+    invoiceDate: moment().format("YYYY-MM-DD"),
     terms: "Due on Receipt",
+    dueDate: moment().format("YYYY-MM-DD"),
     accountsReceivable: "Accounts Receivable",
     salesperson: "",
     subject: "",
@@ -39,7 +39,7 @@ const NewInvoice = () => {
       },
     ],
     taxType: "TDS",
-    taxSelect: 0, // always a number, default GST 0
+    taxSelect: "",
     adjustment: 0,
     totalAmount: 0,
     taxAmount: 0,
@@ -53,25 +53,41 @@ const NewInvoice = () => {
     setValue,
     handleSubmit,
     formState: { errors },
-    getValues,
   } = useForm({ 
     defaultValues: DEFAULTS,
-    mode: "onBlur",
-    reValidateMode: "onChange",
+    shouldUnregister: false, // RHF best practice: keep fields registered to prevent remount issues
   });
 
-  const { fields, append, remove } = useFieldArray({ control, name: "items" });
+  const { fields, append, remove, replace } = useFieldArray({ 
+    control, 
+    name: "items",
+    // RHF best practice: use replace() or reset({ items }) instead of repeated setValue
+  });
 
   const editId = state?.id || null;
   const isNewFromQuote = state?.isNew === true; // conversion flag
   const isEditing = Boolean(editId) && !isNewFromQuote;
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
-
   const [uploadedFiles, setUploadedFiles] = useState([]);
 
+  // Ref for first text input field (invoiceNumber - first text input after customerName select)
+  const firstInputRef = useRef(null);
+
+  // Time-based guard to prevent StrictMode immediate duplicates (250ms window)
+  const lastResetRef = useRef({ editId: null, timestamp: 0 });
+
   useEffect(() => {
+    if (!isEditing && !isNewFromQuote) {
+      // Use reset() with all defaults instead of separate setValue calls
+      reset({
+        ...DEFAULTS,
+        attachments: [], // Include in reset
+      });
+      setUploadedFiles([]);
+      lastResetRef.current = { editId: null, timestamp: 0 };
+      return;
+    }
+
     if (state) {
       if (isNewFromQuote) {
         console.info("📄 [INVOICE FROM CONVERSION]", {
@@ -82,6 +98,20 @@ const NewInvoice = () => {
         });
       }
 
+      // Time-based guard: only block immediate duplicates (StrictMode), not next edit
+      const now = Date.now();
+      const lastReset = lastResetRef.current;
+      if (lastReset.editId === editId && (now - lastReset.timestamp) < 250) {
+        return; // Immediate duplicate (StrictMode)
+      }
+
+      lastResetRef.current = { editId, timestamp: now };
+
+      // Batch form population: single reset() instead of multiple setValue calls
+      // Include ALL nested objects/arrays in reset to prevent remount issues
+      const attachments = state?.attachments || [];
+      const items = state?.items || DEFAULTS.items;
+      
       reset({
         ...DEFAULTS,
         ...state,
@@ -91,16 +121,56 @@ const NewInvoice = () => {
         dueDate: state?.dueDate
           ? moment(state.dueDate).format("YYYY-MM-DD")
           : null,
+        attachments: attachments, // Include in reset instead of separate setValue
+        items: items, // Ensure items array is included in reset
       });
-      setUploadedFiles(state?.attachments || []);
-      setValue("attachments", state?.attachments || []);
+      
+      // RHF best practice: use replace() for useFieldArray after reset() to ensure field array is properly updated
+      // This prevents remount issues with useFieldArray
+      if (items && items.length > 0) {
+        requestAnimationFrame(() => {
+          replace(items);
+        });
+      }
+      
+      setUploadedFiles(attachments);
+
+      // Explicit first field focus on every edit entry
+      requestAnimationFrame(() => {
+        if (firstInputRef.current) {
+          firstInputRef.current.focus();
+          if (typeof window !== 'undefined' && window.localStorage) {
+            try {
+              const enableLogging = localStorage.getItem('debug.keyboard') === 'true';
+              if (enableLogging) {
+                console.log('[Keyboard] First field focused', {
+                  field: 'invoiceNumber',
+                  editId,
+                  hasFocus: document.hasFocus(),
+                  visibilityState: document.visibilityState,
+                  targetElement: firstInputRef.current ? {
+                    tag: firstInputRef.current.tagName,
+                    type: firstInputRef.current.type || 'N/A',
+                    id: firstInputRef.current.id || 'N/A',
+                    name: firstInputRef.current.name || 'N/A',
+                  } : null,
+                });
+              }
+            } catch (e) {
+              // Ignore logging errors
+            }
+          }
+        }
+      });
+
+      // Call refreshKeyboard after form values are populated
+      refreshKeyboard();
       return;
     }
     reset(DEFAULTS);
     setUploadedFiles([]);
     setValue("attachments", []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId]);
+  }, [isEditing, isNewFromQuote, editId, state, reset, setValue]);
 
   // Fetch customers for select (show phone/address)
   const { data: fetchedCustomers } = useQuery({
@@ -163,10 +233,9 @@ const NewInvoice = () => {
 
 
   // ===========================
-  // LIVE WATCH FOR ITEMS (useWatch for stable updates) - debounced to prevent lag
+  // LIVE WATCH FOR ITEMS (useWatch for stable updates)
   // ===========================
-  const rawWatchedItems = useWatch({ control, name: "items" }) || [];
-  const watchedItems = useDebouncedValue(rawWatchedItems, 120);
+  const watchedItems = useWatch({ control, name: "items" }) || [];
 
   // Auto-calculate Due Date based on `terms` (e.g. "Net 15") and invoiceDate
   const paymentTermsValue = watch("terms");
@@ -176,33 +245,42 @@ const NewInvoice = () => {
     try {
       if (!paymentTermsValue) return;
 
-      const base = invoiceDateValue ? moment(invoiceDateValue) : moment();
-      const lower = String(paymentTermsValue || "").toLowerCase();
+      // Performance: Defer due date calculation to avoid blocking edit-entry
+      const calculateDueDate = () => {
+        const base = invoiceDateValue ? moment(invoiceDateValue) : moment();
+        const lower = String(paymentTermsValue || "").toLowerCase();
 
-      // Match patterns like 'Net 15', 'Net 30', or numeric days
-      const netMatch = (paymentTermsValue || "").match(/\bnet\s*(\d+)/i);
-      if (netMatch && netMatch[1]) {
-        const days = Number(netMatch[1]) || 0;
-        const due = base.clone().add(days, "days").format("YYYY-MM-DD");
-        setValue("dueDate", due);
-        return;
-      }
+        // Match patterns like 'Net 15', 'Net 30', or numeric days
+        const netMatch = (paymentTermsValue || "").match(/\bnet\s*(\d+)/i);
+        if (netMatch && netMatch[1]) {
+          const days = Number(netMatch[1]) || 0;
+          const due = base.clone().add(days, "days").format("YYYY-MM-DD");
+          setValue("dueDate", due);
+          return;
+        }
 
-      if (lower.includes("due on receipt") || lower.includes("due on receipt")) {
-        setValue("dueDate", base.format("YYYY-MM-DD"));
-        return;
-      }
+        if (lower.includes("due on receipt") || lower.includes("due on receipt")) {
+          setValue("dueDate", base.format("YYYY-MM-DD"));
+          return;
+        }
 
-      // fallback: if terms include a number, use that as days
-      const numMatch = (paymentTermsValue || "").match(/(\d+)/);
-      if (numMatch && numMatch[1]) {
-        const days = Number(numMatch[1]) || 0;
-        const due = base.clone().add(days, "days").format("YYYY-MM-DD");
-        setValue("dueDate", due);
+        // fallback: if terms include a number, use that as days
+        const numMatch = (paymentTermsValue || "").match(/(\d+)/);
+        if (numMatch && numMatch[1]) {
+          const days = Number(numMatch[1]) || 0;
+          const due = base.clone().add(days, "days").format("YYYY-MM-DD");
+          setValue("dueDate", due);
+        }
+      };
+
+      // Use requestIdleCallback if available, otherwise setTimeout to defer
+      if (typeof window !== 'undefined' && window.requestIdleCallback) {
+        requestIdleCallback(calculateDueDate, { timeout: 100 });
+      } else {
+        setTimeout(calculateDueDate, 0);
       }
     } catch (e) {
       // ignore errors
-      // console.error(e);
     }
   }, [paymentTermsValue, invoiceDateValue, setValue]);
 
@@ -212,17 +290,27 @@ const NewInvoice = () => {
   // Use shared calculation utility
   // calculateLineAmount is imported from utils/calculations
 
-  // Sync item amounts when items change - guarded to prevent unnecessary setValue
+  // Sync item amounts when items change
+  // Performance: Use requestIdleCallback to defer non-critical updates during edit-entry
   useEffect(() => {
-    watchedItems.forEach((item, index) => {
-      const calculatedAmount = calculateLineAmount(item);
-      const currentAmount = getValues(`items.${index}.amount`);
-      const currentValue = toNumber(currentAmount, 0);
-      if (Math.abs(calculatedAmount - currentValue) > 0.01) {
-        setValue(`items.${index}.amount`, calculatedAmount, { shouldDirty: false, shouldValidate: false });
-      }
-    });
-  }, [watchedItems, setValue, getValues]);
+    // Defer amount calculations to avoid blocking edit-entry
+    const updateAmounts = () => {
+      watchedItems.forEach((item, index) => {
+        const calculatedAmount = calculateLineAmount(item);
+        const currentAmount = toNumber(item?.amount, 0);
+        if (Math.abs(calculatedAmount - currentAmount) > 0.01) {
+          setValue(`items.${index}.amount`, calculatedAmount, { shouldDirty: false, shouldValidate: false });
+        }
+      });
+    };
+
+    // Use requestIdleCallback if available, otherwise setTimeout to defer
+    if (typeof window !== 'undefined' && window.requestIdleCallback) {
+      requestIdleCallback(updateAmounts, { timeout: 100 });
+    } else {
+      setTimeout(updateAmounts, 0);
+    }
+  }, [watchedItems, setValue]);
 
   // ===========================
   // SUMMARY CALC - Using shared utilities
@@ -244,22 +332,22 @@ const NewInvoice = () => {
     return calculateGrandTotal(subTotal, summaryTax, adjustment);
   }, [subTotal, summaryTax, adjustment]);
 
-  // Sync calculated values to form state (for display) - guarded to prevent unnecessary setValue
+  // Sync calculated values to form state (for display)
+  // Performance: Defer non-critical updates to avoid blocking edit-entry
   useEffect(() => {
-    const currentTotal = getValues("totalAmount");
-    const currentTax = getValues("taxAmount");
-    const newTotal = finalTotal;
-    const newTax = Math.abs(summaryTax);
-    
-    const nearlyEqual = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
-    
-    if (!nearlyEqual(currentTotal, newTotal)) {
-      setValue("totalAmount", newTotal, { shouldDirty: false });
+    // Defer summary updates to avoid blocking edit-entry
+    const updateSummary = () => {
+      setValue("totalAmount", finalTotal, { shouldDirty: false });
+      setValue("taxAmount", Math.abs(summaryTax), { shouldDirty: false });
+    };
+
+    // Use requestIdleCallback if available, otherwise setTimeout to defer
+    if (typeof window !== 'undefined' && window.requestIdleCallback) {
+      requestIdleCallback(updateSummary, { timeout: 100 });
+    } else {
+      setTimeout(updateSummary, 0);
     }
-    if (!nearlyEqual(currentTax, newTax)) {
-      setValue("taxAmount", newTax, { shouldDirty: false });
-    }
-  }, [finalTotal, summaryTax, setValue, getValues]);
+  }, [finalTotal, summaryTax, setValue]);
 
 
   // ===========================
@@ -292,8 +380,9 @@ const NewInvoice = () => {
     mutationFn: createInvoice,
     onSuccess: () => {
       queryClient.invalidateQueries(["invoices"]);
-      alert("Invoice Created!");
+      notifySuccess("Invoice Created!");
       reset(DEFAULTS);
+      refreshKeyboard();
       navigate("/invoices");
     },
     onError: (err) => handleProvisionalError(err, "Create Invoice"),
@@ -303,7 +392,8 @@ const NewInvoice = () => {
     mutationFn: ({ id, payload }) => updateInvoice(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["invoices"]);
-      alert("Invoice Updated!");
+      notifySuccess("Invoice Updated!");
+      refreshKeyboard();
       navigate("/invoices");
     },
     onError: (err) => handleProvisionalError(err, "Update Invoice"),
@@ -365,9 +455,9 @@ const NewInvoice = () => {
         customerName: data?.customerName || "",
         invoiceNumber: data?.invoiceNumber || "INV-000001",
         orderNumber: data?.orderNumber || "",
-        invoiceDate: data?.invoiceDate ? moment(data.invoiceDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
-        dueDate: data?.dueDate ? moment(data.dueDate).toISOString().split("T")[0] : null,
+        invoiceDate: data?.invoiceDate ? moment(data.invoiceDate).toISOString().split("T")[0] : moment().format("YYYY-MM-DD"),
         terms: data?.terms || "Due on Receipt",
+        dueDate: data?.dueDate ? moment(data.dueDate).toISOString().split("T")[0] : moment().format("YYYY-MM-DD"),
         accountsReceivable: data?.accountsReceivable || "Accounts Receivable",
         salesperson: data?.salesperson || "",
         subject: data?.subject || "",
@@ -375,9 +465,9 @@ const NewInvoice = () => {
         termsAndConditions: data?.termsAndConditions || "",
         items: itemsWithAmounts,
         taxType: finalTaxType,
-        taxSelect: Number(finalTaxRate) || 0, // always a number
+        taxSelect: finalTaxRate, // Send as number, not string
         adjustment: finalAdjustment,
-        taxAmount: Math.abs(finalTaxAmount),
+        taxAmount: finalTaxAmount,
         totalAmount: finalTotalAmount,
         attachments: uploadedFiles.length > 0 ? uploadedFiles : (data?.attachments || []),
       };
@@ -512,7 +602,16 @@ const NewInvoice = () => {
             <Controller
               name="invoiceNumber"
               control={control}
-              render={({ field }) => <input {...field} className={`form-control ${errors.invoiceNumber ? "is-invalid" : ""}`} />}
+              render={({ field }) => (
+                <input
+                  {...field}
+                  ref={(el) => {
+                    firstInputRef.current = el;
+                    field.ref(el);
+                  }}
+                  className={`form-control ${errors.invoiceNumber ? "is-invalid" : ""}`}
+                />
+              )}
             />
           </div>
 
@@ -578,7 +677,9 @@ const NewInvoice = () => {
               name="salesperson"
               control={control}
               render={({ field }) => (
-                <input {...field} className="form-control" placeholder="Enter salesperson name" />
+                <select {...field} className="form-select">
+                  <option value="">Select or Add Salesperson</option>
+                </select>
               )}
             />
           </div>
@@ -730,12 +831,11 @@ const NewInvoice = () => {
                           control={control}
                           render={({ field }) => (
                             <select {...field} className="form-select">
-                              <option value={0}>GST 0%</option>
-                              <option value={1}>GST 1%</option>
-                              <option value={5}>GST 5%</option>
-                              <option value={12}>GST 12%</option>
-                              <option value={18}>GST 18%</option>
-                              <option value={28}>GST 28%</option>
+                              <option value="">Select a Tax</option>
+                              <option value={1}>1%</option>
+                              <option value={5}>5%</option>
+                              <option value={12}>12%</option>
+                              <option value={18}>18%</option>
                             </select>
                           )}
                         />
@@ -860,13 +960,12 @@ const NewInvoice = () => {
                   control={control}
                   render={({ field }) => (
                     <select {...field} className="form-select form-select-sm w-auto">
-                      <option value={0}>GST 0%</option>
-                      <option value={1}>GST 1%</option>
-                      <option value={5}>GST 5%</option>
-                      <option value={10}>GST 10%</option>
-                      <option value={12}>GST 12%</option>
-                      <option value={18}>GST 18%</option>
-                      <option value={28}>GST 28%</option>
+                      <option value="">Select a Tax</option>
+                      <option value={1}>1%</option>
+                      <option value={5}>5%</option>
+                      <option value={10}>10%</option>
+                      <option value={12}>12%</option>
+                      <option value={18}>18%</option>
                     </select>
                   )}
                 />

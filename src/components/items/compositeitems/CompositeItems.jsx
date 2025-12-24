@@ -6,6 +6,8 @@ import html2canvas from "html2canvas";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage"
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal"
 import * as XLSX from "xlsx";   // ✅ ADDED
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 const CompositeItems = () => {
     const navigate = useNavigate();
@@ -23,11 +25,12 @@ const CompositeItems = () => {
     // ✅ DELETE
     const handleDeleteSelected = () => {
         if (selectedRows.length === 0) {
-            alert("Please select items to delete.");
+            notifyInfo("Please select items to delete.");
             return;
         }
 
-        if (window.confirm("Delete selected composite items?")) {
+        const confirmed = await confirm("Delete selected composite items?");
+    if (confirmed) {
             const ids = selectedRows.map((r) => r.id);
             setItems((prev) => prev.filter((item) => !ids.includes(item.id)));
         }
@@ -37,8 +40,9 @@ const CompositeItems = () => {
         navigate("/newcompositeitem", { state: row });
     };
 
-    const handleDeleteSingle = (id) => {
-        if (window.confirm("Are you sure to delete this composite item?")) {
+    const handleDeleteSingle = async (id) => {
+        const confirmed = await confirm("Are you sure to delete this composite item?");
+    if (confirmed) {
             setItems((prev) => prev.filter((i) => i.id !== id));
         }
     };

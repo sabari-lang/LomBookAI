@@ -191,15 +191,18 @@ export const updateAirInboundProvisional = async (jobNo, hawb, data) => {
 };
 
 
-// Delete Provisional Entry
-export const deleteAirInboundProvisional = async (id) => {
+// Delete Provisional Entry (uses composite key: jobNo + hawb)
+export const deleteAirInboundProvisional = async (jobNo, hawb) => {
     try {
-        // TODO: Verify backend route - may need jobNo and hawb instead of just id
-        const response = await logisticsApi.delete(`/air-inbound/houses/provisional/${id}`);
+        if (!jobNo || !hawb) {
+            throw new Error("jobNo and hawb are required for deleting Air Inbound provisionals");
+        }
+        const url = `/air-inbound/houses/job/${jobNo}/hawb/${hawb}/accounting/provisional`;
+        const response = await logisticsApi.delete(url);
         return response.data;
     } catch (error) {
-        console.error(`Error deleting provisional entry ID ${id}:`, error);
-        return null;
+        console.error(`Error deleting Air Inbound provisional (jobNo: ${jobNo}, hawb: ${hawb}):`, error);
+        throw error;
     }
 };
 

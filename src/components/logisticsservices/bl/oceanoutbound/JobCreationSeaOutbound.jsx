@@ -5,33 +5,39 @@ import { createOceanOutboundJob, updateOceanOutboundJob } from "./oceanOutboundA
 import { CONTAINER_SIZE_LIST, UNIT_PKG_LIST } from "../../../../utils/unitPkgList";
 import moment from "moment";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import NewWindow from "react-new-window";
 import CustomerSearch from "../../../common/popup/CustomerSearch";
-import { useUnlockInputs } from "../../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../../utils/refreshKeyboard";
+import { closeModal as closeModalUtil, cleanupModalBackdrop } from "../../../../utils/closeModal";
+import { SHIPMENT_CATEGORY } from "../../../../constants/shipment";
+import { DEFAULT_SHIPPER } from "../../../../utils/defaultPartyInfo";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../utils/notifications";
+import { applyJobDefaults, applyShipmentTermPaymentLogic, normalizeJobDates } from "../../../../utils/jobDefaults";
 
-const initialValues = {
+const baseInitialValues = {
   // TOP SECTION
   jobNo: "",
   mblNo: "",
   blType: "Master B/L",
   consol: "Consol",
+  exportType: "Export",
   shipment: "",
   status: "Open",
   branch: "HEAD OFFICE",
   // LEFT SECTION (Shipper / Consignee / Notify)
   shipperName: "",
   shipperAddress: "",
-  consigneeName: "LOM LOGISTICS INDIA PVT LTD",
-  consigneeAddress:
-    "NO.151, VILLAGE ROAD, 7TH FLOOR,\nGEE GEE EMERALD BUILDING, NUNGAMBAKKAM,\nCHENNAI - 600034 , TAMILNADU- INDIA\nTEL: 044 66455913 FAX: 044 66455913",
+  consigneeName: "",
+  consigneeAddress: "",
 
   notifyName: "",
   notifyAddress: "",
+  agentAddress: "",
 
   // LEFT LOWER SECTION (Notify + Dates + Terms)
-  onBoardDate: "",
-  arrivalDate: "",
+  onBoardDate: null,
+  arrivalDate: null,
   precarriageBy: "N.A",
   portDischarge: "",
   freightTerm: "",
@@ -48,14 +54,13 @@ const initialValues = {
   finalDestination: "",
   vesselName: "",
 
-
   voy: "",
   callSign: "",
-  package: "",
+  package: null,
   unitPkg: "BALES",
-  grossWeight: "",
+  grossWeight: null,
   unitWeight: "Kgs",
-  measurement: "",
+  measurement: null,
   unitCbm: "CBM",
 
   // CONTAINERS (DYNAMIC ARRAY)
@@ -64,8 +69,8 @@ const initialValues = {
       containerNo: "",
       size: "20 HC",
       term: "CFS/CFS",
-      wgt: "",
-      pkg: "",
+      wgt: null,
+      pkg: null,
       sealNo: ""
     }
   ],
@@ -76,10 +81,12 @@ const initialValues = {
   descLong: "",
 
   freightPayable: "",
-  originalBL: "",
+  originalBL: null,
   place: "",
-  dateOfIssue: "",
+  dateOfIssue: null,
+  notes: "",
 }
+const initialValues = applyJobDefaults(baseInitialValues);
 
 const JobCreationSeaOutbound = ({ editData, setEditData }) => {
   const {
@@ -96,81 +103,156 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
 
 
   const { fields, append, remove } = useFieldArray({ control, name: "containers" });
-
+  const shippingTerm = watch("shippingTerm");
+  const hideSize = shippingTerm === "LCL/LCL";
   const [open, setOpen] = useState(false);
   const [searchTarget, setSearchTarget] = useState(null);
+  const [isLoadingEdit, setIsLoadingEdit] = useState(false);
+  const lastAutoFillRef = useRef({ pkg: "", wgt: "" });
 
   const isEditing = Boolean(editData?.id);
   const queryClient = useQueryClient();
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
+  // Edit Form Data - with isLoadingEdit to prevent side-effects from overwriting
+  useEffect(() => {
+    if (!editData?.id) {
+      setIsLoadingEdit(false);
+      return;
+    }
 
-  // Keep shipper defaulted when consol === 'Consol'
+    setIsLoadingEdit(true);
+    const merged = applyShipmentTermPaymentLogic(
+      applyJobDefaults({
+        ...initialValues, // BASE DEFAULTS
+        ...editData,        // OVERRIDE WITH API DATA
+        arrivalDate: editData?.arrivalDate
+          ? moment(editData.arrivalDate).format("YYYY-MM-DD")
+          : "",
+        onBoardDate: editData?.onBoardDate
+          ? moment(editData.onBoardDate).format("YYYY-MM-DD")
+          : "",
+        dateOfIssue: editData?.dateOfIssue
+          ? moment(editData.dateOfIssue).format("YYYY-MM-DD")
+          : "",
+      })
+    );
+    reset(merged);
+    // Call refreshKeyboard after form values are populated
+    refreshKeyboard();
+    // Allow form to settle after reset, then disable edit loading flag
+    const timer = setTimeout(() => setIsLoadingEdit(false), 100);
+    return () => clearTimeout(timer);
+  }, [editData?.id]);
+
+  // OCR create-mode prefill (when editData exists but has no id)
+  useEffect(() => {
+    if (!editData || editData?.id) return;
+    const merged = applyShipmentTermPaymentLogic(
+      applyJobDefaults({
+        ...initialValues,
+        ...editData,
+        arrivalDate: editData?.arrivalDate ? moment(editData.arrivalDate).format("YYYY-MM-DD") : "",
+        onBoardDate: editData?.onBoardDate ? moment(editData.onBoardDate).format("YYYY-MM-DD") : "",
+        dateOfIssue: editData?.dateOfIssue ? moment(editData.dateOfIssue).format("YYYY-MM-DD") : "",
+      })
+    );
+    reset(merged);
+  }, [editData, reset]);
+
+  // Auto-fill shipper when consol === 'Consol' (Outbound)
   const consolValue = watch("consol");
   useEffect(() => {
-    if (consolValue === "Consol") {
-      // Only set defaults if not in edit mode
-      if (!isEditing) {
-        setValue("shipperName", initialValues.shipperName || "");
-        setValue("shipperAddress", initialValues.shipperAddress || "");
+    // Skip if we're in the process of loading edit data
+    if (isLoadingEdit) return;
+    // Skip consol-based auto-fill when editing - preserve existing data
+    if (isEditing) return;
+
+    const isConsol = consolValue === "Consol" || consolValue === "CONSOL";
+    
+    if (isConsol) {
+      // Only auto-fill if fields are empty (don't overwrite user input)
+      const currentName = watch("shipperName");
+      const currentAddress = watch("shipperAddress");
+      
+      if (!currentName && !currentAddress) {
+        setValue("shipperName", DEFAULT_SHIPPER.shipperName);
+        setValue("shipperAddress", DEFAULT_SHIPPER.shipperAddress);
       }
     } else {
-      // when not Consol, clear shipper fields to allow user input
-      if (!isEditing) {
+      // When Single is selected, clear defaults (only if they match default values)
+      const currentName = watch("shipperName");
+      const currentAddress = watch("shipperAddress");
+      
+      if (currentName === DEFAULT_SHIPPER.shipperName && 
+          currentAddress === DEFAULT_SHIPPER.shipperAddress) {
         setValue("shipperName", "");
         setValue("shipperAddress", "");
       }
     }
-  }, [consolValue, setValue, isEditing]);
+  }, [consolValue, setValue, isEditing, isLoadingEdit]);
 
-  // Edit Form Data
-  useEffect(() => {
-    if (!editData?.id) return;
-
-    reset({
-      ...initialValues, // BASE DEFAULTS
-      ...editData,        // OVERRIDE WITH API DATA
-      arrivalDate: editData?.arrivalDate
-        ? moment(editData.arrivalDate).format("YYYY-MM-DD")
-        : "",
-      onBoardDate: editData?.onBoardDate
-        ? moment(editData.onBoardDate).format("YYYY-MM-DD")
-        : "",
-      dateOfIssue: editData?.dateOfIssue
-        ? moment(editData.dateOfIssue).format("YYYY-MM-DD")
-        : "",
+  const applyTermPayments = (termValue) => {
+    const updated = applyShipmentTermPaymentLogic({
+      ...getValues(),
+      shipment: termValue,
     });
-  }, [editData?.id]);
+    if (updated.wtvalPP !== undefined) setValue("wtvalPP", updated.wtvalPP);
+    if (updated.otherPP !== undefined) setValue("otherPP", updated.otherPP);
+    if (updated.coll1 !== undefined) setValue("coll1", updated.coll1);
+    if (updated.coll2 !== undefined) setValue("coll2", updated.coll2);
+  };
 
+  // Auto-fill Package and Gross Weight into first container row
+  const packageValue = watch("package");
+  const grossWeightValue = watch("grossWeight");
+  useEffect(() => {
+    if (isLoadingEdit) return;
 
-  // Helper to close Bootstrap modal
-  const closeModal = () => {
+    const containers = getValues("containers");
+    if (!containers || containers.length === 0) {
+      // Initialize containers array if empty
+      setValue("containers", [{ containerNo: "", size: "20 HC", term: "CFS/CFS", wgt: "", pkg: "", sealNo: "" }]);
+      return;
+    }
+
+    const firstContainer = containers[0];
+    if (!firstContainer) return;
+
+    // Get current container values (handle null/undefined)
+    const currentPkg = firstContainer.pkg ?? "";
+    const currentWgt = firstContainer.wgt ?? "";
+    
+    // Convert package/grossWeight to strings for comparison
+    const packageStr = packageValue != null ? String(packageValue) : "";
+    const weightStr = grossWeightValue != null ? String(grossWeightValue) : "";
+
+    // Auto-fill package if container is empty or matches last auto-filled value
+    if (packageStr && (currentPkg === "" || currentPkg === lastAutoFillRef.current.pkg)) {
+      setValue("containers.0.pkg", packageStr);
+      lastAutoFillRef.current.pkg = packageStr;
+    } else if (!packageStr && currentPkg === lastAutoFillRef.current.pkg) {
+      // Clear if source is cleared and it matches last auto-fill
+      setValue("containers.0.pkg", "");
+      lastAutoFillRef.current.pkg = "";
+    }
+
+    // Auto-fill weight if container is empty or matches last auto-filled value
+    if (weightStr && (currentWgt === "" || currentWgt === lastAutoFillRef.current.wgt)) {
+      setValue("containers.0.wgt", weightStr);
+      lastAutoFillRef.current.wgt = weightStr;
+    } else if (!weightStr && currentWgt === lastAutoFillRef.current.wgt) {
+      // Clear if source is cleared and it matches last auto-fill
+      setValue("containers.0.wgt", "");
+      lastAutoFillRef.current.wgt = "";
+    }
+  }, [packageValue, grossWeightValue, setValue, getValues, isLoadingEdit]);
+
+  // Helper to close Bootstrap modal using shared utility
+  const handleCloseModal = () => {
     reset(initialValues);
     setEditData?.(null);
-
-    const modalElement = document.getElementById("seaoutCreateJobModal");
-    if (modalElement) {
-      // Try Bootstrap 5 API first
-      const bootstrap = window.bootstrap;
-      if (bootstrap?.Modal) {
-        const modal = bootstrap.Modal.getInstance(modalElement);
-        if (modal) {
-          modal.hide();
-          return;
-        }
-      }
-      // Fallback: use jQuery/bootstrap if available
-      if (window.$) {
-        window.$(modalElement).modal("hide");
-        return;
-      }
-      // Last resort: trigger close button click
-      const closeBtn = modalElement.querySelector('[data-bs-dismiss="modal"]');
-      if (closeBtn) {
-        closeBtn.click();
-      }
-    }
+    closeModalUtil("seaoutCreateJobModal");
+    cleanupModalBackdrop();
   };
 
   // POST API 
@@ -178,8 +260,8 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
     mutationFn: createOceanOutboundJob,
     onSuccess: () => {
       queryClient.invalidateQueries(["oceanOutboundJobs"]);
-      alert("Job Created Successfully");
-      closeModal();
+      notifySuccess("Job Created Successfully");
+      handleCloseModal();
     },
     onError: (error) => {
       const message =
@@ -188,7 +270,7 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
         error?.message ||
         "Something went wrong while creating the job.";
 
-      alert(`Create Failed: ${message}`);
+      notifyError(`Create Failed: ${message}`);
     },
   });
 
@@ -197,8 +279,8 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
     mutationFn: ({ id, payload }) => updateOceanOutboundJob(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["oceanOutboundJobs"]);
-      alert("Job Updated Successfully");
-      closeModal();
+      notifySuccess("Job Updated Successfully");
+      handleCloseModal();
     },
     onError: (error) => {
       const message =
@@ -207,7 +289,7 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
         error?.message ||
         "Something went wrong while updating the job.";
 
-      alert(`Update Failed: ${message}`);
+      notifyError(`Update Failed: ${message}`);
     },
   });
 
@@ -231,34 +313,64 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
   const addContainer = () =>
     append({ containerNo: "", size: "20 HC", term: "CFS/CFS", wgt: "", pkg: "", sealNo: "" });
 
+  // Auto-update freightTerm based on shipment
+  const shipment = watch("shipment");
+  useEffect(() => {
+    if (!shipment) {
+      setValue("freightTerm", "");
+      applyTermPayments(shipment);
+      return;
+    }
+
+    const isPrepaid = SHIPMENT_CATEGORY.PREPAID.includes(shipment);
+    const isCollect = SHIPMENT_CATEGORY.COLLECT.includes(shipment);
+
+    if (isPrepaid) {
+      setValue("freightTerm", "FREIGHT PREPAID");
+    } else if (isCollect) {
+      setValue("freightTerm", "FREIGHT COLLECT");
+    } else {
+      setValue("freightTerm", "");
+    }
+    applyTermPayments(shipment);
+  }, [shipment, setValue]);
+
   // Form Submit
 
-  const onSubmit = (data) => {
+  const onSubmit = (formValues) => {
+    let payload = applyJobDefaults(formValues);
+    payload = applyShipmentTermPaymentLogic(payload);
     // Convert Consol => boolean
-    data.consol = data?.consol === "Consol";
+    payload.consol = payload?.consol === "Consol";
+
+    // Convert date fields to null if empty
+    payload.onBoardDate = payload?.onBoardDate || null;
+    payload.arrivalDate = payload?.arrivalDate || null;
+    payload.dateOfIssue = payload?.dateOfIssue || null;
 
     // Convert numeric fields
-    data.package = data.package ? Number(data.package) : null;
-    data.grossWeight = data.grossWeight ? Number(data.grossWeight) : null;
-
-    data.originalBL = data.originalBL ? Number(data.originalBL) : null;
-    data.measurement = data.measurement ? Number(data.measurement) : null;
+    payload.package = payload.package ? Number(payload.package) : null;
+    payload.grossWeight = payload.grossWeight ? Number(payload.grossWeight) : null;
+    payload.originalBL = payload.originalBL ? Number(payload.originalBL) : null;
+    payload.measurement = payload.measurement ? Number(payload.measurement) : null;
 
     // Convert containers numeric fields
-    data.containers = data.containers.map(c => ({
+    payload.containers = payload.containers.map(c => ({
       ...c,
       wgt: c.wgt ? Number(c.wgt) : null,
       pkg: c.pkg ? Number(c.pkg) : null
     }));
 
+    payload = normalizeJobDates(payload);
+
     // Submit WITHOUT dto wrapper
     if (isEditing) {
       updateMutation.mutate({
         id: editData?.jobNo,
-        payload: data
+        payload
       });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(payload);
     }
   };
 
@@ -484,25 +596,32 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
 
                       <div className="row g-2 align-items-end mt-1">
                         <div className="col-md-4">
-                          <label className="fw-bold">Port of Discharge</label>
+                          <label className="fw-bold d-flex align-items-center gap-2">
+                            Port of Discharge
+                            <Search size={14} onClick={() => { setSearchTarget("portDischarge"); setOpen(true); }} style={{ cursor: 'pointer' }} />
+                          </label>
                           <Controller name="portDischarge" control={control} render={({ field }) => <input className="form-control" {...field} />} />
                         </div>
 
                         <div className="col-md-4">
                           <label className="fw-bold">Freight Term</label>
-                          <Controller name="freightTerm" control={control} render={({ field }) => <input className="form-control" {...field} />} />
+                          <Controller name="freightTerm" control={control} render={({ field }) => <input className="form-control" {...field} readOnly />} />
                         </div>
 
                         <div className="col-md-4">
                           <label className="fw-bold">Shipping Term</label>
-                          <Controller name="shippingTerm" control={control} render={({ field }) => (
-                            <select className="form-select" {...field}>
-                              <option value="">--Select--</option>
-                              <option>FOB</option>
-                              <option>CIF</option>
-                              <option>EXW</option>
-                            </select>
-                          )} />
+                          <Controller
+                            name="shippingTerm"
+                            control={control}
+                            render={({ field }) => (
+                              <select className="form-select" {...field}>
+                                <option value="">--Select--</option>
+                                <option value="LCL/LCL">LCL/LCL</option>
+                                <option value="FCL/FCL">FCL/FCL</option>
+                                <option value="FCL/LCL">FCL/LCL</option>
+                              </select>
+                            )}
+                          />
                         </div>
                       </div>
                     </div>
@@ -528,22 +647,34 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
                     <div className="mb-3">
                       <div className="row g-2 mb-2">
                         <div className="col-md-3">
-                          <label className="fw-bold">Place of Receipt</label>
+                          <label className="fw-bold d-flex align-items-center gap-2">
+                            Place of Receipt
+                            <Search size={14} onClick={() => { setSearchTarget("placeReceipt"); setOpen(true); }} style={{ cursor: 'pointer' }} />
+                          </label>
                           <Controller name="placeReceipt" control={control} render={({ field }) => <input className="form-control" {...field} />} />
                         </div>
 
                         <div className="col-md-3">
-                          <label className="fw-bold">Port of Loading</label>
+                          <label className="fw-bold d-flex align-items-center gap-2">
+                            Port of Loading
+                            <Search size={14} onClick={() => { setSearchTarget("portLoading"); setOpen(true); }} style={{ cursor: 'pointer' }} />
+                          </label>
                           <Controller name="portLoading" control={control} render={({ field }) => <input className="form-control" {...field} />} />
                         </div>
 
                         <div className="col-md-3">
-                          <label className="fw-bold">Place of Delivery</label>
+                          <label className="fw-bold d-flex align-items-center gap-2">
+                            Place of Delivery
+                            <Search size={14} onClick={() => { setSearchTarget("placeDelivery"); setOpen(true); }} style={{ cursor: 'pointer' }} />
+                          </label>
                           <Controller name="placeDelivery" control={control} render={({ field }) => <input className="form-control" {...field} />} />
                         </div>
 
                         <div className="col-md-3">
-                          <label className="fw-bold">Final Destination</label>
+                          <label className="fw-bold d-flex align-items-center gap-2">
+                            Final Destination
+                            <Search size={14} onClick={() => { setSearchTarget("finalDestination"); setOpen(true); }} style={{ cursor: 'pointer' }} />
+                          </label>
                           <Controller name="finalDestination" control={control} render={({ field }) => <input className="form-control" {...field} />} />
                         </div>
                       </div>
@@ -571,7 +702,7 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
                       <div className="row g-2 align-items-end">
                         <div className="col-md-3">
                           <label className="fw-bold">Package</label>
-                          <Controller name="package" control={control} render={({ field }) => <input className="form-control" {...field} />} />
+                          <Controller name="package" control={control} render={({ field }) => <input className="form-control" {...field} value={field.value ?? ""} />} />
                         </div>
 
                         <div className="col-md-3">
@@ -594,7 +725,7 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
 
                         <div className="col-md-3">
                           <label className="fw-bold">Gross Weight</label>
-                          <Controller name="grossWeight" control={control} render={({ field }) => <input className="form-control" {...field} />} />
+                          <Controller name="grossWeight" control={control} render={({ field }) => <input className="form-control" {...field} value={field.value ?? ""} />} />
                         </div>
 
                         <div className="col-md-3">
@@ -626,7 +757,7 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
                     <thead className="table-light">
                       <tr>
                         <th style={{ width: "20%" }}>Container No</th>
-                        <th style={{ width: "12%" }}>Size</th>
+                        {!hideSize && <th style={{ width: "12%" }}>Size</th>}
                         <th style={{ width: "12%" }}>Term</th>
                         <th style={{ width: "10%" }}>Wgt</th>
                         <th style={{ width: "15%" }}>Pkg</th>
@@ -650,22 +781,22 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
                           </td>
 
                           {/* Size */}
-                          <td>
-                            <Controller
-                              name={`containers.${i}.size`}
-                              control={control}
-                              render={({ field }) => (
-                                <select className="form-select form-select-sm" {...field}>
-                                  <option value="">--Select--</option>
-                                  {CONTAINER_SIZE_LIST?.map((size) => (
-                                    <option key={size} value={size}>{size}</option>
-                                  ))}
-                                </select>
-                              )}
-                            />
-
-                          </td>
-
+                          {!hideSize && (
+                            <td>
+                              <Controller
+                                name={`containers.${i}.size`}
+                                control={control}
+                                render={({ field }) => (
+                                  <select className="form-select form-select-sm" {...field}>
+                                    <option value="">--Select--</option>
+                                    {CONTAINER_SIZE_LIST?.map((size) => (
+                                      <option key={size} value={size}>{size}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              />
+                            </td>
+                          )}
                           {/* Term */}
                           <td>
                             <Controller
@@ -690,7 +821,7 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
                               name={`containers.${i}.wgt`}
                               control={control}
                               render={({ field }) => (
-                                <input className="form-control form-control-sm" {...field} />
+                                <input className="form-control form-control-sm" {...field} value={field.value ?? ""} />
                               )}
                             />
                           </td>
@@ -701,7 +832,7 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
                               name={`containers.${i}.pkg`}
                               control={control}
                               render={({ field }) => (
-                                <input className="form-control form-control-sm" {...field} />
+                                <input className="form-control form-control-sm" {...field} value={field.value ?? ""} />
                               )}
                             />
                           </td>
@@ -886,6 +1017,16 @@ const JobCreationSeaOutbound = ({ editData, setEditData }) => {
               } else if (searchTarget === 'forDelivery') {
                 setValue("forDeliveryApplyTo", name);
                 setValue("forDeliveryApplyTo2", address);
+              } else if (searchTarget === 'placeReceipt') {
+                setValue("placeReceipt", name);
+              } else if (searchTarget === 'portLoading') {
+                setValue("portLoading", name);
+              } else if (searchTarget === 'placeDelivery') {
+                setValue("placeDelivery", name);
+              } else if (searchTarget === 'finalDestination') {
+                setValue("finalDestination", name);
+              } else if (searchTarget === 'portDischarge') {
+                setValue("portDischarge", name);
               }
 
               setOpen(false);

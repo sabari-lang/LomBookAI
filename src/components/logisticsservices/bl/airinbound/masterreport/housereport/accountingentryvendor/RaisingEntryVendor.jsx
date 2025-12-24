@@ -6,14 +6,15 @@ import { FaSearch } from "react-icons/fa";
 import NewWindow from "react-new-window";
 import VendorSearch from "../../../../../../common/popup/VendorSearch";
 import moment from "moment";
-import { useNavigate } from "react-router-dom";
-
 import {
     createAirInboundVendorAccount,
     updateAirInboundVendorAccount,
 } from "../../../Api";
 
 import { handleProvisionalError } from "../../../../../../../utils/handleProvisionalError";
+import { refreshKeyboard } from "../../../../../../../utils/refreshKeyboard";
+import { useAppBack } from "../../../../../../../hooks/useAppBack";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
 
 // ----------------------------------
 // Safe helpers (same exactly as Provisional)
@@ -56,8 +57,10 @@ const sampleRow = () => ({
 });
 
 const RaisingEntryVendor = ({ editData, setEditData }) => {
+    const isEditing = Boolean(editData?.id || editData?._id);
+    
     const queryClient = useQueryClient();
-    const navigate = useNavigate();
+    const { goBack } = useAppBack();
     const [open, setOpen] = useState(false);
     const [searchTarget, setSearchTarget] = useState(null);
 
@@ -73,8 +76,6 @@ const RaisingEntryVendor = ({ editData, setEditData }) => {
         safeStr(storedHouse?.hawbNo) ||
         safeStr(storedHouse?.houseNumber);
     const mawb = safeStr(storedHouse?.mawb);
-
-    const isEditing = Boolean(editData?.id || editData?._id);
 
     // ----------------------------------
     // DEFAULT VALUES (with safe fallback)
@@ -112,7 +113,7 @@ const RaisingEntryVendor = ({ editData, setEditData }) => {
         control,
         name: "items",
     });
-
+    
     // ----------------------------------
     // WATCH ITEMS - debounced to prevent lag
     // ----------------------------------
@@ -260,6 +261,8 @@ const RaisingEntryVendor = ({ editData, setEditData }) => {
                 : "",
             items: safeItems,
         });
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
     }, [isEditing]);
 
     // ----------------------------------
@@ -279,7 +282,7 @@ const RaisingEntryVendor = ({ editData, setEditData }) => {
         onSuccess: () => {
             queryClient.invalidateQueries(["airInboundVendorAccounts"]);
 
-            alert("Vendor accounting entry created successfully");
+            notifySuccess("Vendor accounting entry created successfully");
 
             // RESET FORM
             reset(defaultValues);
@@ -313,7 +316,7 @@ const RaisingEntryVendor = ({ editData, setEditData }) => {
             
             // Wait a bit for modal to close, then navigate
             setTimeout(() => {
-                navigate(-1);
+                goBack();
             }, 300);
         },
 
@@ -331,7 +334,7 @@ const RaisingEntryVendor = ({ editData, setEditData }) => {
         onSuccess: () => {
             queryClient.invalidateQueries(["airInboundVendorAccounts"]);
 
-            alert("Vendor accounting entry updated successfully");
+            notifySuccess("Vendor accounting entry updated successfully");
 
             // RESET FORM
             reset(defaultValues);
@@ -365,7 +368,7 @@ const RaisingEntryVendor = ({ editData, setEditData }) => {
             
             // Wait a bit for modal to close, then navigate
             setTimeout(() => {
-                navigate(-1);
+                goBack();
             }, 300);
         },
 

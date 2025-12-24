@@ -17,6 +17,8 @@ import moment from "moment";
 import Pagination from "../../../../../../common/pagination/Pagination";
 import { extractItems } from "../../../../../../../utils/extractItems";
 import { extractPagination } from "../../../../../../../utils/extractPagination";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+import { confirm } from "../../../../../../../utils/confirm";
 import {
     deleteAirOutboundProvisional,
     getAirOutboundProvisionals,
@@ -166,16 +168,24 @@ const ProvisionalEntryOut = () => {
     // DELETE HANDLER
     //========================
     const deleteMutation = useMutation({
-        mutationFn: (id) => deleteAirOutboundProvisional(id),
+        mutationFn: () => deleteAirOutboundProvisional(jobNo, hawb),
         onSuccess: () => {
-            alert("Provisional Entry Deleted");
+            notifySuccess("Provisional Entry Deleted");
             queryClient.invalidateQueries(["airOutboundProvisionals", jobNo, hawb]);
+        },
+        onError: (error) => {
+            notifyError("Failed to delete provisional entry: " + (error?.message || "Unknown error"));
         },
     });
 
-    const handleDelete = (id) => {
-        if (window.confirm("Are you sure?")) {
-            deleteMutation.mutate(id);
+    const handleDelete = async () => {
+        if (!jobNo || !hawb) {
+            notifyError("Job No and HAWB are required for deletion");
+            return;
+        }
+        const confirmed = await confirm("Are you sure you want to delete all provisional entries for this house?");
+        if (confirmed) {
+            deleteMutation.mutate();
         }
     };
 
@@ -333,7 +343,7 @@ const ProvisionalEntryOut = () => {
                                                 <td className="text-center">
                                                     <button
                                                         className="btn btn-danger btn-sm"
-                                                        onClick={() => handleDelete(row.id)}
+                                                        onClick={() => handleDelete()}
                                                     >
                                                         <FaTrash />
                                                     </button>

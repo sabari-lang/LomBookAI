@@ -12,6 +12,8 @@ import Pagination from "../../../../../../common/pagination/Pagination";
 import { extractItems } from "../../../../../../../utils/extractItems";
 import { extractPagination } from "../../../../../../../utils/extractPagination";
 import { deleteOceanInboundVendorAccount, getOceanInboundVendorAccounts } from "../../../oceanInboundApi";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+import { confirm } from "../../../../../../../utils/confirm";
 
 const AccountingVendorSeaIn = () => {
     const navigate = useNavigate();
@@ -60,28 +62,47 @@ const AccountingVendorSeaIn = () => {
 
     // Normalize
     const normalize = (entry = {}) => {
-        const items = Array.isArray(entry.items) ? entry.items : [];
+        const items = Array.isArray(entry?.items) ? entry.items : [];
 
         const totalSum = items.reduce(
             (s, it) => s + Number(it?.total ?? 0),
             0
         );
 
+        const safeStr = (v) => (v ?? "").toString();
+
         return {
-            id: entry.id,
-            voucherDate: entry.voucherDate ?? "",
-            voucherNo: entry.voucherNo ?? "",
-            status: entry.status ?? "",
-            voucherType: entry.voucherType ?? "",
-            mawbNo: entry.mawbNo ?? entry.mblNo ?? "",
-            hawbNo: entry.hblNo ?? "",
-            partyName: entry.partyName ?? "",
-            partyAddress: entry.partyAddress ?? "",
-            contactPerson: entry.tel ?? "",
+            id: safeStr(entry?.id ?? entry?._id),
+            voucherDate: safeStr(entry?.voucherDate),
+            voucherNo: safeStr(entry?.voucherNo),
+            status: safeStr(entry?.status),
+            voucherType: safeStr(entry?.voucherType),
+
+            // ✅ Safe fallback (Air + Sea support)
+            mawbNo: safeStr(
+                entry?.mawbNo ??
+                entry?.mblNo ??
+                entry?.masterNo ??
+                ""
+            ),
+
+            // ✅ Safe fallback
+            hawbNo: safeStr(
+                entry?.hawbNo ??
+                entry?.hblNo ??
+                entry?.houseNo ??
+                ""
+            ),
+
+            partyName: safeStr(entry?.partyName),
+            partyAddress: safeStr(entry?.partyAddress),
+            contactPerson: safeStr(entry?.tel ?? entry?.contactPerson),
+
             total: totalSum,
             __raw: entry,
         };
     };
+
 
     const allItems = (extractItems(apiRaw) ?? []).map(normalize);
 
@@ -120,18 +141,25 @@ const AccountingVendorSeaIn = () => {
     );
 
     const deleteMutation = useMutation({
-        mutationFn: ({ id }) => deleteOceanInboundVendorAccount(id),
+        mutationFn: () => deleteOceanInboundVendorAccount(jobNo, hbl),
         onSuccess: () => {
-            alert("Deleted successfully!");
+            notifySuccess("Deleted successfully!");
             refresh();
         },
-        onError: () => alert("Delete failed"),
+        onError: (error) => {
+            console.error("Delete failed:", error);
+            notifyError("Delete failed: " + (error?.message || "Unknown error"));
+        },
     });
 
-    const handleDelete = (row) => {
-        if (!row?.id) return;
-        if (!window.confirm("Delete?")) return;
-        deleteMutation.mutate({ id: row.id });
+    const handleDelete = async (row) => {
+        if (!jobNo || !hbl) {
+            notifyError("Job No and HBL are required for deletion");
+            return;
+        }
+        const confirmed = await confirm("Delete this vendor accounting entry?");
+        if (!confirmed) return;
+        deleteMutation.mutate();
     };
 
     const handleView = (row) => {

@@ -10,6 +10,8 @@ import { extractItems } from "../../../../../../../utils/extractItems";
 import { handleProvisionalError } from "../../../../../../../utils/handleProvisionalError";
 import { extractPagination } from "../../../../../../../utils/extractPagination";
 import RaiseAccountingEntryOut from "../provisionalentry/RaiseAccountingEntryOut";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+import { confirm } from "../../../../../../../utils/confirm";
 
 const AccountingEntryCusOut = () => {
     const navigate = useNavigate();
@@ -152,14 +154,15 @@ const AccountingEntryCusOut = () => {
         mutationFn: ({ id }) => deleteAirOutboundCustomerAccount(id),
         onSuccess: () => {
             queryClient.invalidateQueries(["airOutboundCustomerAcc"]);
-            alert("Deleted successfully");
+            notifySuccess("Deleted successfully");
         },
         onError: (err) => handleProvisionalError(err, "Delete Customer Accounting Entry"),
     });
 
-    const handleDelete = (row) => {
-        if (!row?.id) return alert("Missing ID");
-        if (!window.confirm("Are you sure?")) return;
+    const handleDelete = async (row) => {
+        if (!row?.id) return notifyError("Missing ID");
+        const confirmed = await confirm("Are you sure?");
+    if (!confirmed) return;
         deleteMutation.mutate({ id: row.id });
     };
 

@@ -1,0 +1,51 @@
+/**
+ * Modal Scroll Stability CSS
+ * 
+ * Ensures modals have proper scrolling behavior and don't break layout
+ * Only applies max-height where needed; avoids breaking small modals
+ */
+
+/* Large modals - apply max-height and scroll */
+.modal-content {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.modal-body {
+    overflow: auto;
+    flex: 1 1 auto;
+}
+
+/* Small modals - don't apply max-height (let them be natural size) */
+.modal-sm .modal-content {
+    max-height: none;
+}
+
+.modal-sm .modal-body {
+    overflow: visible;
+}
+
+/* Ensure modal dialog is scrollable when content exceeds viewport */
+.modal-dialog-scrollable .modal-content {
+    max-height: 90vh;
+}
+
+.modal-dialog-scrollable .modal-body {
+    overflow-y: auto;
+}
+
+/* Prevent body scroll when modal is open */
+body.modal-open {
+    overflow: hidden;
+}
+
+/* Ensure backdrop doesn't interfere with scrolling */
+.modal-backdrop {
+    z-index: 1040;
+}
+
+.modal {
+    z-index: 1050;
+}
+

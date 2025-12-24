@@ -9,6 +9,8 @@ import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
 
 import * as XLSX from "xlsx"; // ✅ ADDED FOR EXCEL
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 const PriceList = () => {
     const navigate = useNavigate();
@@ -165,11 +167,12 @@ const PriceList = () => {
     // ✅ Delete Selected Rows
     const handleDeleteSelected = () => {
         if (selectedRows.length === 0) {
-            alert("Select at least one record.");
+            notifyInfo("Select at least one record.");
             return;
         }
 
-        if (window.confirm("Are you sure you want to delete selected records?")) {
+        const confirmed = await confirm("Are you sure you want to delete selected records?");
+    if (confirmed) {
             const ids = selectedRows.map((row) => row.id);
             setPriceLists((prev) => prev.filter((p) => !ids.includes(p.id)));
         }

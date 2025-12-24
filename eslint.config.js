@@ -24,6 +24,22 @@ export default defineConfig([
     },
     rules: {
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-alert': 'error',
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'alert',
+          message: 'Use notifySuccess/notifyError from utils/notifications instead of alert()',
+        },
+        {
+          name: 'confirm',
+          message: 'Use confirm() from utils/confirm instead of window.confirm()',
+        },
+        {
+          name: 'prompt',
+          message: 'Use a custom input dialog instead of prompt()',
+        },
+      ],
     },
   },
 ])

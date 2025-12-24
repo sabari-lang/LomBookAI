@@ -4,7 +4,10 @@ import { Search, Trash } from "react-bootstrap-icons";
 import { useQueryClient } from '@tanstack/react-query';
 import { CONTAINER_SIZE_LIST, UNIT_PKG_LIST } from '../../../../../../utils/unitPkgList';
 
+
 const CreateHouseBillOfLaddingOut = () => {
+    // Create-only form - always unlock on mount
+    
     const storedRaw = sessionStorage.getItem("houseAirwayData");
     const storedData = storedRaw ? JSON.parse(storedRaw) : null;
 

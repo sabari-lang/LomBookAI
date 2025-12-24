@@ -11,7 +11,10 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 
+
 const BankStatement = () => {
+    // Report filter form - always unlock on mount
+    
     const { control } = useForm({
         defaultValues: {
             fromDate: "2025-11-01",

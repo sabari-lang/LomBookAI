@@ -9,8 +9,8 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { getItems } from "../../items/api";
 import { extractItems } from "../../../utils/extractItems";
 import { calculateLineAmount, calculateSubtotal, calculateDiscountAmount, calculateTaxAmount, calculateGrandTotal, toNumber, parseTaxPercentage } from "../../../utils/calculations";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
-import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+// Removed refreshKeyboard import - auto-refresh disabled by default
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 /**
  * NOTE: This file was updated to follow the NewSalesOrder pattern but for Purchase Orders.
@@ -58,9 +58,6 @@ const NewPurchaseOrder = () => {
   const isNewFromSource = state?.isNew === true; // when creating PO from another doc
   const isEditing = Boolean(editId) && !isNewFromSource;
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
-
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [selectedVendor, setSelectedVendor] = useState(null);
 
@@ -73,9 +70,7 @@ const NewPurchaseOrder = () => {
     watch,
     formState: { errors }
   } = useForm({
-    defaultValues: DEFAULTS,
-    mode: "onBlur",
-    reValidateMode: "onChange",
+    defaultValues: DEFAULTS
   });
 
   useEffect(() => {
@@ -93,6 +88,8 @@ const NewPurchaseOrder = () => {
         setUploadedFiles(state.attachments);
         setValue("attachments", state.attachments);
       }
+      // Removed refreshKeyboard() - auto-refresh disabled by default to prevent blinking
+      // Use manual "Fix keyboard input" button in Settings if needed
       // vendor will be synced once vendorOptions are loaded (see effect below)
       return;
     }
@@ -101,8 +98,7 @@ const NewPurchaseOrder = () => {
     setUploadedFiles([]);
     setValue("attachments", []);
     setSelectedVendor(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId]);
+  }, [state, reset, setValue]);
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -129,37 +125,24 @@ const NewPurchaseOrder = () => {
   });
 
   const vendorOptions = extractItems(fetchedVendorsRaw) || [];
-  // DEBUG: inspect vendor objects returned by API to verify phone/address fields
-  // Remove this log after verification if you prefer no console noise.
-  console.log("vendorOptions (NewPurchaseOrder):", vendorOptions);
 
-  // Watch items and totals - debounced to prevent lag
-  const rawWatchItems = useWatch({ control, name: "items" }) || [];
-  const watchItems = useDebouncedValue(rawWatchItems, 120);
+  // Watch items and totals
+  const watchItems = useWatch({ control, name: "items" }) || [];
   const discountPercent = useWatch({ control, name: "discountPercent" }) || 0;
   const taxRate = parseFloat(useWatch({ control, name: "taxRate" }) || 0) || 0;
   const adjustment = parseFloat(useWatch({ control, name: "adjustment" }) || 0) || 0;
 
-  // Sync per-item amount using shared calculation utility - guarded to prevent unnecessary setValue
-  useEffect(() => {
-    watchItems.forEach((item, index) => {
+  // Compute per-item amount using shared calculation utility (includes discount and tax)
+  const itemsWithAmount = useMemo(() => {
+    return watchItems.map((item, index) => {
       const calculatedAmount = calculateLineAmount(item);
-      const currentAmount = getValues(`items.${index}.amount`);
-      const prev = toNumber(currentAmount, 0);
-      const nearlyEqual = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
-      if (!nearlyEqual(calculatedAmount, prev)) {
+      const prev = toNumber(item?.amount, 0);
+      if (Math.abs(calculatedAmount - prev) > 0.01) {
         setValue(`items.${index}.amount`, calculatedAmount, { shouldDirty: false, shouldValidate: false });
       }
-    });
-  }, [watchItems, setValue, getValues]);
-
-  // Memoize items with calculated amounts for display/calculation
-  const itemsWithAmount = useMemo(() => {
-    return watchItems.map((item) => {
-      const calculatedAmount = calculateLineAmount(item);
       return { ...item, amount: calculatedAmount };
     });
-  }, [watchItems]);
+  }, [watchItems, setValue]);
 
   // Subtotal based on item amounts using shared utility
   const subTotal = calculateSubtotal(itemsWithAmount);
@@ -203,7 +186,7 @@ const NewPurchaseOrder = () => {
     mutationFn: (payload) => createPurchaseOrder(payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["purchaseOrders"]);
-      alert("Purchase order created successfully");
+      notifySuccess("Purchase order created successfully");
       reset(DEFAULTS);
       setUploadedFiles([]);
       setValue("attachments", []);
@@ -216,7 +199,7 @@ const NewPurchaseOrder = () => {
     mutationFn: ({ id, payload }) => updatePurchaseOrder(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["purchaseOrders"]);
-      alert("Purchase order updated successfully");
+      notifySuccess("Purchase order updated successfully");
       navigate("/purchaseorders");
     },
     onError: (error) => handleProvisionalError(error, "Update Purchase Order")
@@ -326,8 +309,7 @@ const NewPurchaseOrder = () => {
         if (found.paymentTerms) setValue("paymentTerms", found.paymentTerms);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vendorOptions, state?.vendorId]);
+  }, [vendorOptions, state, setValue]);
 
   return (
     <div className="container-fluid bg-light rounded-3 pt-0 pb-3 px-4 m-0">
@@ -796,11 +778,11 @@ const NewPurchaseOrder = () => {
         {/* Attachments Section */}
         <div className="row mt-3">
           <div className="col-md-8" />
-          {/* <div className="col-md-4">
+          <div className="col-md-4">
             <label className="form-label fw-semibold">Attach File(s) to Purchase Order</label>
             <div className="d-flex gap-2 align-items-center">
               <label className="btn btn-outline-secondary btn-sm mb-0">
-             
+                {/* ...existing code... */}
                 <i className="bi bi-upload me-1"></i> Upload File
               </label>
               <small className="text-muted">You can upload a maximum of 10 files, 10MB each</small>
@@ -826,12 +808,15 @@ const NewPurchaseOrder = () => {
                 </ul>
               )}
             </div>
-          </div> */}
+          </div>
         </div>
 
         {/* Buttons */}
         <div className="d-flex gap-2 mt-4">
-    
+          <button type="button" className="btn btn-secondary btn-sm" disabled={isSaving} onClick={handleSubmit(onSubmit)}>
+            {isSaving ? (isEditing ? "Updating draft..." : "Saving draft...") : "Save as Draft"}
+          </button>
+
           <button type="submit" className="btn btn-primary btn-sm" disabled={isSaving}>
             {isSaving ? (isEditing ? "Updating..." : "Saving...") : isEditing ? "Update and Send" : "Save and Send"}
           </button>

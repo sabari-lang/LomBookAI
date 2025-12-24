@@ -14,6 +14,7 @@ import {
     endOfYear,
 } from "date-fns";
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 
 const SACReport = () => {
@@ -204,7 +205,7 @@ const SACReport = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to generate PDF");
+            notifyError("Failed to generate PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);

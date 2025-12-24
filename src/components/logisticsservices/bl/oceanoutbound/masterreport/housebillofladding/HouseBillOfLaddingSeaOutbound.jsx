@@ -15,6 +15,8 @@ import { extractPagination } from "../../../../../../utils/extractPagination";
 import { extractItems } from "../../../../../../utils/extractItems";
 
 import { getOceanOutboundHouses, deleteOceanOutboundHouse, updateOceanOutboundHouseStatus } from "../../oceanOutboundApi";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../utils/notifications";
+import { confirm } from "../../../../../../utils/confirm";
 
 const HouseBillOfLaddingSeaOutbound = () => {
     const navigate = useNavigate();
@@ -61,7 +63,7 @@ const HouseBillOfLaddingSeaOutbound = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["oceanOutboundHouseList", jobNo] });
             setEditData(null);
-            alert("Status updated successfully!");
+            notifySuccess("Status updated successfully!");
             const modalElement = document.getElementById("seaoutboundHouseStatusUpdateModal");
             if (modalElement) {
                 const modal = window.bootstrap?.Modal.getInstance(modalElement);
@@ -71,13 +73,14 @@ const HouseBillOfLaddingSeaOutbound = () => {
         onError: (error) => handleProvisionalError(error, "Status Update"),
     });
 
-    const handleDelete = (row) => {
+    const handleDelete = async (row) => {
         const hblNo = row.hbl ?? row.hblNo;
         if (!hblNo || !jobNo) {
-            alert("Missing jobNo or hblNo information");
+            notifyError("Missing jobNo or hblNo information");
             return;
         }
-        if (window.confirm(`Are you sure you want to delete house ${hblNo}?`)) {
+        const confirmed = await confirm(`Are you sure you want to delete house ${hblNo}?`);
+        if (confirmed) {
             deleteMutation.mutate({ jobNo, hblNo });
         }
     };
@@ -86,7 +89,7 @@ const HouseBillOfLaddingSeaOutbound = () => {
         if (!editData) return;
         const hblNo = editData.hbl ?? editData.hblNo;
         if (!hblNo || !jobNo) {
-            alert("Missing jobNo or hblNo information");
+            notifyError("Missing jobNo or hblNo information");
             return;
         }
         statusUpdateMutation.mutate({ jobNo, hblNo, payload: formData });

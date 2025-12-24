@@ -11,6 +11,8 @@ import {
   deletePaymentReceived         // DELETE
 } from "../api";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 
 // ---------------- SAFE extractItems ----------------
@@ -110,10 +112,11 @@ const AllPayment = () => {
     },
   });
 
-  const handleDelete = () => {
-    if (selectedIds.length === 0) return alert("Select rows to delete");
+  const handleDelete = async () => {
+    if (selectedIds.length === 0) return notifyInfo("Select rows to delete");
 
-    if (!window.confirm("Delete selected payments?")) return;
+    const confirmed = await confirm("Delete selected payments?");
+    if (!confirmed) return;
 
     selectedIds.forEach((id) => deleteMutation.mutate(id));
   };

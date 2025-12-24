@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Pagination from "../../../common/pagination/Pagination";
 import { extractItems } from "../../../../utils/extractItems";
 import { deleteAirOutboundJob, getAirOutboundJobs } from "./airOutboundApi";
+import { confirm } from "../../../../utils/confirm";
 
 const AirOutboundComp = () => {
     const navigate = useNavigate();
@@ -29,10 +30,11 @@ const AirOutboundComp = () => {
         onSettled: () => setDeletingJobKey(null),
     });
 
-    const handleDelete = (row = {}) => {
+    const handleDelete = async (row = {}) => {
         const jobNo = row.jobNo;
         if (!jobNo) return;
-        if (!window.confirm(`Delete Air Outbound job ${jobNo}?`)) return;
+        const confirmed = await confirm(`Delete Air Outbound job ${jobNo}?`);
+    if (!confirmed) return;
 
         setDeletingJobKey(jobNo);
         deleteMutation.mutate(jobNo);
@@ -82,23 +84,6 @@ const AirOutboundComp = () => {
     };
 
     // Check if modal should be opened from InvoiceAgent
-    useEffect(() => {
-        const shouldOpen = sessionStorage.getItem("openJobCreationModal");
-        if (shouldOpen === "air-outbound") {
-            const modalEl = document.getElementById("createOutboundJobcreationModal");
-            if (modalEl) {
-                const bs = window.bootstrap;
-                if (bs?.Modal) {
-                    const modal = bs.Modal.getInstance(modalEl) || new bs.Modal(modalEl);
-                    modal.show();
-                } else if (window.$) {
-                    window.$(modalEl).modal("show");
-                }
-            }
-            sessionStorage.removeItem("openJobCreationModal");
-        }
-    }, []);
-
     return (
         <>
             <div className="container-fluid mt-3">

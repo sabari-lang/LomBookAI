@@ -4,7 +4,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createBankingTransaction, updateBankingTransaction } from "./api";
 import { handleProvisionalError } from "../../utils/handleProvisionalError";
-import { useUnlockInputs } from "../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
 
 const AddBank = () => {
     const navigate = useNavigate();
@@ -13,9 +14,6 @@ const AddBank = () => {
     const editData = location.state;
     const editId = editData?.id || editData?._id;
     const isEditing = Boolean(editId);
-
-    // ✅ Keyboard unlock hook for edit mode
-    useUnlockInputs(isEditing);
 
     const {
         control,
@@ -56,6 +54,8 @@ const AddBank = () => {
             description: editData?.description || "",
             primary: Boolean(editData?.primary),
         });
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
     }, [editId]);
 
     // Create mutation
@@ -63,7 +63,7 @@ const AddBank = () => {
         mutationFn: (payload) => createBankingTransaction(payload),
         onSuccess: () => {
             queryClient.invalidateQueries(["banking-transactions"]);
-            alert("Bank Account created successfully");
+            notifySuccess("Bank Account created successfully");
             reset();
             navigate("/banking");
         },
@@ -75,7 +75,7 @@ const AddBank = () => {
         mutationFn: ({ id, payload }) => updateBankingTransaction(id, payload),
         onSuccess: () => {
             queryClient.invalidateQueries(["banking-transactions"]);
-            alert("Bank Account updated successfully");
+            notifySuccess("Bank Account updated successfully");
             navigate("/banking");
         },
         onError: (error) => handleProvisionalError(error, "Update Bank Account"),

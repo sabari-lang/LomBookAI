@@ -16,6 +16,8 @@ import Pagination from "../../../../../../common/pagination/Pagination";
 import { extractItems } from "../../../../../../../utils/extractItems";
 import { extractPagination } from "../../../../../../../utils/extractPagination";
 import RaiseAccountingEntry from "../provisionalentry/RaiseAccountingEntry";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+import { confirm } from "../../../../../../../utils/confirm";
 
 const AccountingEntryCus = () => {
     const navigate = useNavigate();
@@ -193,7 +195,7 @@ const AccountingEntryCus = () => {
         mutationFn: ({ id }) => deleteAirInboundCustomerAccount(id),
         onSuccess: () => {
             queryClient.invalidateQueries(["customerAccountingEntries"]);
-            alert("Deleted successfully");
+            notifySuccess("Deleted successfully");
         },
         onError: (err) => {
             // best-effort error message like handleProvisionalError
@@ -201,16 +203,17 @@ const AccountingEntryCus = () => {
                 err?.response?.data?.message ||
                 err?.message ||
                 "Delete failed";
-            alert(msg);
+            notifyError(msg);
         },
     });
 
-    const handleDelete = (row) => {
+    const handleDelete = async (row) => {
         if (!row?.id) {
-            alert("Missing ID");
+            notifyError("Missing ID");
             return;
         }
-        if (!window.confirm("Delete this entry?")) return;
+        const confirmed = await confirm("Delete this entry?");
+        if (!confirmed) return;
         deleteMutation.mutate({ id: row.id });
     };
 

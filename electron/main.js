@@ -5,7 +5,69 @@ const log = require("electron-log");
 const isDev = !app.isPackaged;
 
 let win;
-let isRefreshing = false; // Prevent multiple simultaneous refreshes
+
+// -----------------------------------
+// Stability Mode Configuration (Compatibility Profiles)
+// -----------------------------------
+// Load stability mode BEFORE app ready (required for switches)
+const stabilityModeConfig = require('./stabilityModeConfig');
+const stabilityMode = stabilityModeConfig.getStabilityMode();
+const stabilityConfig = stabilityModeConfig.getStabilityModeConfig(stabilityMode);
+
+// Configure logging (Windows: enable file logging if not already configured)
+if (process.platform === 'win32' && !process.argv.includes('--enable-logging')) {
+    // electron-log already configured, but ensure file logging is enabled
+    // electron-log defaults to file logging on Windows
+}
+
+// Determine config source for logging
+let configSource = 'default';
+if (stabilityModeConfig.readStabilityMode()) {
+    configSource = 'userData file';
+} else if (process.env.LOM_STABILITY_MODE) {
+    configSource = 'environment variable (LOM_STABILITY_MODE)';
+} else if (process.argv.some(arg => arg.includes('--stability-mode'))) {
+    configSource = 'command line argument (--stability-mode)';
+}
+
+// Log stability mode at startup
+log.info('🔧 Stability Mode Active:', {
+    mode: stabilityMode,
+    config: stabilityConfig,
+    source: configSource,
+    platform: process.platform,
+    isDev: isDev,
+});
+
+// -----------------------------------
+// Apply Stability Mode Switches (BEFORE app.whenReady())
+// -----------------------------------
+
+// Mode A (default): disable-renderer-backgrounding
+if (stabilityConfig.disableRendererBackgrounding) {
+    app.commandLine.appendSwitch('disable-renderer-backgrounding');
+    log.info('✅ Applied: disable-renderer-backgrounding (Mode A)');
+}
+
+// Mode B: Windows occlusion mitigation
+if (stabilityConfig.disableWinOcclusion && process.platform === 'win32') {
+    app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+    log.info('✅ Applied: disable-features=CalculateNativeWinOcclusion (Mode B, Windows only)');
+}
+
+// Mode C: Disable hardware acceleration
+if (stabilityConfig.disableHardwareAcceleration) {
+    app.disableHardwareAcceleration();
+    log.info('✅ Applied: disableHardwareAcceleration() (Mode C)');
+}
+
+// Log which switches were applied
+log.info('📊 Stability Mode Switches Applied:', {
+    mode: stabilityMode,
+    disableRendererBackgrounding: stabilityConfig.disableRendererBackgrounding,
+    disableWinOcclusion: stabilityConfig.disableWinOcclusion,
+    disableHardwareAcceleration: stabilityConfig.disableHardwareAcceleration,
+});
 
 // Ensure stable folder path so auto-update doesn't reset user data
 const appName = isDev ? "lomBookDev" : "lomBook";
@@ -19,9 +81,18 @@ function createWindow() {
             preload: path.join(__dirname, "preload.js"),
             contextIsolation: true,
             nodeIntegration: false,
+            // Stability Mode: Prevent background throttling
+            // When false, renderer continues running at full speed even when window is backgrounded
+            backgroundThrottling: stabilityConfig.backgroundThrottling,
         },
         backgroundColor: '#ffffff', // Prevent flash during blur/focus
         show: false, // Don't show until ready
+    });
+
+    // Log webPreferences configuration (official Electron feature)
+    log.info('📊 BrowserWindow webPreferences (Stability Mode):', {
+        mode: stabilityMode,
+        backgroundThrottling: stabilityConfig.backgroundThrottling ? 'enabled (throttling ON)' : 'disabled (throttling OFF)',
     });
 
     // Show window when ready to prevent initial flash
@@ -79,50 +150,114 @@ function createWindow() {
     });
 
     // -----------------------------------
-    // IPC: Keyboard / Focus Refresh Fix
+    // IPC: Keyboard / Focus Refresh Fix (LAST RESORT)
     // -----------------------------------
-    /**
-     * Production-optimized keyboard refresh for Electron
-     * Fixes: Frozen input fields when editing forms
-     * Method: Ultra-fast blur/focus cycle (5ms = nearly invisible)
-     * Debounced: Prevents multiple simultaneous refreshes
-     * Fallback: webContents.focus() tried first for zero-blink
-     */
+    // Existing IPC channel: blur/focus cycle (causes visible blink)
+    // Keep unchanged as last resort fallback
     ipcMain.on("refresh-keyboard", () => {
-        if (!win || win.isDestroyed()) return;
-        
-        // Debounce: Prevent rapid successive calls from multiple components
-        if (isRefreshing) return;
-        isRefreshing = true;
-
-        try {
-            // STRATEGY 1: Try webContents focus first (no visible blink)
-            const contents = win.webContents;
-            if (contents && !contents.isDestroyed()) {
-                contents.focus();
-            }
-
-            // STRATEGY 2: Ultra-fast window blur/focus (5ms = barely visible)
+        if (win && !win.isDestroyed()) {
             win.blur();
             setTimeout(() => {
                 if (win && !win.isDestroyed()) {
                     win.focus();
-                    
-                    // Reset debounce flag after operation completes
-                    setTimeout(() => {
-                        isRefreshing = false;
-                    }, 20);
-                } else {
-                    isRefreshing = false;
                 }
-            }, 5); // 5ms = 10x faster than old 50ms, nearly invisible to users
-            
-        } catch (err) {
-            isRefreshing = false;
-            log.error("❌ [refresh-keyboard] Error:", err);
+            }, 50);
+        }
+    });
+
+    // -----------------------------------
+    // IPC: Stability Mode Management
+    // -----------------------------------
+    // Get current stability mode
+    ipcMain.handle("get-stability-mode", () => {
+        const currentMode = stabilityModeConfig.getStabilityMode();
+        return {
+            mode: currentMode,
+            config: stabilityModeConfig.getStabilityModeConfig(currentMode),
+        };
+    });
+
+    // Set stability mode (persists to config file, requires restart)
+    ipcMain.handle("set-stability-mode", (event, mode) => {
+        try {
+            if (!Object.values(stabilityModeConfig.STABILITY_MODES).includes(mode)) {
+                return { success: false, error: 'Invalid mode' };
+            }
+
+            const success = stabilityModeConfig.writeStabilityMode(mode);
+            if (success) {
+                log.info('📝 Stability mode changed:', { mode, requiresRestart: true });
+            }
+            return { success, requiresRestart: true };
+        } catch (e) {
+            log.error('Failed to set stability mode:', e);
+            return { success: false, error: e.message };
+        }
+    });
+
+    // -----------------------------------
+    // IPC: Ensure Window Focus (NO BLINK)
+    // -----------------------------------
+    // Official Electron focus APIs: show(), focus(), webContents.focus()
+    // No blur/focus cycle = no visible blinking
+    ipcMain.on("ensure-window-focus", () => {
+        if (win && !win.isDestroyed()) {
+            // Show window if hidden
+            if (!win.isVisible()) {
+                win.show();
+            }
+
+            // Official Electron focus APIs (no blink)
+            win.focus();
+            win.webContents.focus();
+
+            // Log focus status (when logging enabled via renderer flag)
+            // Official Electron API: win.isFocused() for diagnostics
+            const isFocused = win.isFocused();
+            log.info('🔧 ensure-window-focus called (Official Electron Focus APIs)', {
+                isFocused: isFocused, // win.isFocused() - confirms OS focus acquired
+                isVisible: win.isVisible(),
+                platform: process.platform,
+            });
+
+            // Optional: Windows-only always-on-top toggle (aggressive, behind flag)
+            // Only use if window still not focused after 50ms
+            // Keep existing flag system for this feature (separate from stability mode)
+            const useAlwaysOnTopForFocus = process.argv.includes('--use-always-on-top-focus') ||
+                                          process.env.USE_ALWAYS_ON_TOP_FOCUS === 'true' ||
+                                          false;
+            if (useAlwaysOnTopForFocus && process.platform === 'win32') {
+                setTimeout(() => {
+                    if (win && !win.isDestroyed() && !win.isFocused()) {
+                        log.info('⚠️ Window still not focused after 50ms, using always-on-top toggle (Windows)');
+                        win.setAlwaysOnTop(true);
+                        setTimeout(() => {
+                            if (win && !win.isDestroyed()) {
+                                win.setAlwaysOnTop(false);
+                            }
+                        }, 100);
+                    }
+                }, 50);
+            }
         }
     });
 }
+
+// -----------------------------------
+// GPU Info Logging (after app ready)
+// -----------------------------------
+app.on('gpu-info-update', () => {
+    app.getGPUInfo('basic').then((gpuInfo) => {
+        log.info('📊 GPU Info (Basic):', {
+            vendorId: gpuInfo.auxAttributes?.vendorId || 'N/A',
+            deviceId: gpuInfo.auxAttributes?.deviceId || 'N/A',
+            vendorString: gpuInfo.auxAttributes?.vendorString || 'N/A',
+            driverVersion: gpuInfo.auxAttributes?.driverVersion || 'N/A',
+        });
+    }).catch((err) => {
+        log.error('Failed to get GPU info:', err);
+    });
+});
 
 // -----------------------------------
 // Electron Application Lifecycle

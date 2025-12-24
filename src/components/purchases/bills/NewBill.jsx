@@ -9,8 +9,8 @@ import { getItems } from "../../items/api";
 import { extractItems } from "../../../utils/extractItems";
 import { getCustomers } from "../../sales/api";
 import { calculateLineAmount, calculateSubtotal, calculateDiscountAmount, calculateTaxAmount, calculateGrandTotal, toNumber, parseTaxPercentage } from "../../../utils/calculations";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
-import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+// Removed refreshKeyboard import - auto-refresh disabled by default
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const DEFAULTS = {
   vendorName: "",
@@ -52,20 +52,14 @@ const NewBill = () => {
   const isNewFromPO = state?.isNew === true; // conversion flag from PO
   const isEditing = Boolean(editId) && !isNewFromPO;
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
-
   const {
     control,
     handleSubmit,
     watch,
     reset,
     setValue,
-    getValues,
   } = useForm({
     defaultValues: DEFAULTS,
-    mode: "onBlur",
-    reValidateMode: "onChange",
   });
 
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -86,14 +80,15 @@ const NewBill = () => {
         setUploadedFiles(state.attachments);
         setValue("attachments", state.attachments);
       }
+      // Removed refreshKeyboard() - auto-refresh disabled by default to prevent blinking
+      // Use manual "Fix keyboard input" button in Settings if needed
       return;
     }
 
     reset(DEFAULTS);
     setUploadedFiles([]);
     setValue("attachments", []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId]);
+  }, [state, reset, setValue, isNewFromPO]);
 
   const handleFileUpload = (event) => {
     const files = Array.from(event.target.files);
@@ -121,10 +116,11 @@ const NewBill = () => {
     mutationFn: (payload) => createBill(payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["bills"]);
-      alert("Bill created successfully");
+      notifySuccess("Bill created successfully");
       reset(DEFAULTS);
       setUploadedFiles([]);
       setValue("attachments", []);
+      // Removed refreshKeyboard() - auto-refresh disabled by default to prevent blinking
       navigate("/bills");
     },
     onError: (error) => handleProvisionalError(error, "Create Bill"),
@@ -134,22 +130,22 @@ const NewBill = () => {
     mutationFn: ({ id, payload }) => updateBill(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["bills"]);
-      alert("Bill updated successfully");
+      notifySuccess("Bill updated successfully");
+      // Removed refreshKeyboard() - auto-refresh disabled by default to prevent blinking
       navigate("/bills");
     },
     onError: (error) => handleProvisionalError(error, "Update Bill"),
   });
 
   const { fields, append, remove } = useFieldArray({ control, name: "items" });
-  // useWatch gives reactive updates - debounced to prevent lag
-  const rawWatchItems = useWatch({ control, name: "items" }) || [];
-  const watchItems = useDebouncedValue(rawWatchItems, 120);
+  // useWatch gives reactive updates on change (not only on blur)
+  const watchItems = useWatch({ control, name: "items" }) || [];
   const watchDiscount = parseFloat(watch("discountPercent") || 0) || 0;
   const watchAdjustment = parseFloat(watch("adjustment") || 0) || 0;
 
   // Sync per-item amount back into the form using shared calculation utility
-  useEffect(() => {
-    (watchItems || []).forEach((item, index) => {
+  const itemsWithAmount = useMemo(() => {
+    return (watchItems || []).map((item, index) => {
       // Parse tax percentage from string like "GST 12%" to number 12
       const taxString = item?.tax || "";
       const parsedTax = parseFloat(String(taxString).match(/(\d+(?:\.\d+)?)/)?.[0] || 0) || 0;
@@ -164,33 +160,14 @@ const NewBill = () => {
       };
       
       const calculatedAmount = calculateLineAmount(itemForCalc);
-      const currentAmount = getValues(`items.${index}.amount`);
-      const prev = toNumber(currentAmount, 0);
-      const nearlyEqual = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
-      
-      if (!nearlyEqual(calculatedAmount, prev)) {
+      const prev = toNumber(item?.amount, 0);
+      if (Math.abs(calculatedAmount - prev) > 0.01) {
         // keep form field in sync (not marking dirty)
         setValue(`items.${index}.amount`, calculatedAmount, { shouldDirty: false, shouldValidate: false });
       }
-    });
-  }, [watchItems, setValue, getValues]);
-
-  // Memoize items with calculated amounts for display/calculation
-  const itemsWithAmount = useMemo(() => {
-    return (watchItems || []).map((item) => {
-      const taxString = item?.tax || "";
-      const parsedTax = parseFloat(String(taxString).match(/(\d+(?:\.\d+)?)/)?.[0] || 0) || 0;
-      const itemForCalc = {
-        ...item,
-        tax: parsedTax,
-        discount: toNumber(item?.discount, 0),
-        quantity: toNumber(item?.quantity, 1),
-        rate: toNumber(item?.rate, 0),
-      };
-      const calculatedAmount = calculateLineAmount(itemForCalc);
       return { ...item, amount: calculatedAmount };
     });
-  }, [watchItems]);
+  }, [watchItems, setValue]);
 
   // Subtotal based on synced item amounts using shared utility
   const subtotal = calculateSubtotal(itemsWithAmount);
@@ -238,8 +215,7 @@ const NewBill = () => {
         if (found.paymentTerms) setValue("paymentTerms", found.paymentTerms);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vendorOptions, state?.vendorId]);
+  }, [vendorOptions, state, setValue]);
 
   // ✅ Calculate totals using shared utilities
   const discountAmount = calculateDiscountAmount(subtotal, watchDiscount);
@@ -254,28 +230,13 @@ const NewBill = () => {
   // TDS reduces total, TCS increases total - using shared utility
   const total = calculateGrandTotal(taxableAmount, taxAmount, toNumber(watchAdjustment, 0));
   
-  // Sync calculated values to form state - guarded to prevent unnecessary setValue
+  // Sync calculated values to form state
   useEffect(() => {
-    const currentSubtotal = getValues("subTotal");
-    const currentDiscount = getValues("discountValue");
-    const currentTax = getValues("taxAmount");
-    const currentTotal = getValues("totalAmount");
-    
-    const nearlyEqual = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
-    
-    if (!nearlyEqual(currentSubtotal, subtotal)) {
-      setValue("subTotal", subtotal, { shouldDirty: false });
-    }
-    if (!nearlyEqual(currentDiscount, discountAmount)) {
-      setValue("discountValue", discountAmount, { shouldDirty: false });
-    }
-    if (!nearlyEqual(currentTax, Math.abs(taxAmount))) {
-      setValue("taxAmount", Math.abs(taxAmount), { shouldDirty: false });
-    }
-    if (!nearlyEqual(currentTotal, total)) {
-      setValue("totalAmount", total, { shouldDirty: false });
-    }
-  }, [subtotal, discountAmount, taxAmount, total, setValue, getValues]);
+    setValue("subTotal", subtotal, { shouldDirty: false });
+    setValue("discountValue", discountAmount, { shouldDirty: false });
+    setValue("taxAmount", Math.abs(taxAmount), { shouldDirty: false });
+    setValue("totalAmount", total, { shouldDirty: false });
+  }, [subtotal, discountAmount, taxAmount, total, setValue]);
   
   const isSaving = createMutation.isLoading || updateMutation.isLoading;
 

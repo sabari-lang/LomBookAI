@@ -10,6 +10,7 @@ import { getGstrTwoReport } from "../reportAPI";
 import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 
 const GSTTwo = () => {
@@ -184,7 +185,7 @@ const GSTTwo = () => {
                         setShowPreview(true);
                 } catch (err) {
                         console.error(err);
-                        alert("Failed to generate PDF");
+                        notifyError("Failed to generate PDF");
                 } finally {
                         if (tempContainer.current) {
                                 document.body.removeChild(tempContainer.current);

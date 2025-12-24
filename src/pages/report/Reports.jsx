@@ -103,53 +103,53 @@ const Reports = () => {
         { name: "All parties", component: <AllParties /> },
         { name: "Party Report By Item", component: <PartyReportByItem /> },
         { name: "Sale Purchase By Party", component: <SalePurchaseByParty /> },
-        { name: "Sale Purchase By Party Group", component: <SalePurchaseByPartyGroup /> },
+        // { name: "Sale Purchase By Party Group", component: <SalePurchaseByPartyGroup /> },
       ],
     },
-    {
-      title: "GST reports",
-      reports: [
-        { name: "GSTR 1", component: <GSTROne /> },
-        { name: "GSTR 2", component: <GSTTwo /> },
-        // { name: "GSTR 3B", component: <GSTR3B /> },
-        // { name: "GSTR 9", component: <GSTR9 /> },
-        { name: "Sale Summary By HSN", component: <SalesSummaryByHsn /> },
-        { name: "SAC Report", component: <SACReport /> },
-      ],
-    },
-    {
-      title: "Item/ Stock report",
-      reports: [
-        { name: "Stock summary", component: <StockSummary /> },
-        { name: "Item Report By Party", component: <ItemReportByParty /> },
-        { name: "Item Wise Profit And Loss", component: <ItemWiseProfitLoss /> },
-        { name: "Item Category Wise Profit And Loss", component: <ItemCategoryWiseProfitLoss /> },
-        { name: "Low Stock Summary", component: <LowStockSummary /> },
-        { name: "Stock Detail", component: <StockDetails /> },
-        { name: "Item Detail", component: <ItemDetails /> },
-        { name: "Sale/ Purchase Report By Item Category", component: <SalePurchaseReportByItem /> },
-        { name: "Stock Summary Report By Item Category", component: <StockSummaryReportByItem /> },
-        { name: "Item Wise Discount", component: <ItemWiseDiscount /> },
-      ],
-    },
-    {
-      title: "Business Status",
-      reports: [
-        { name: "Bank Statement", component: <BankStatement /> },
-        { name: "Discount Report", component: <DiscountReport /> },
-      ],
-    },
-    {
-      title: "Taxes",
-      reports: [
-        { name: "GST Report", component: <GSTReport /> },
-        { name: "GST Rate Report", component: <GSTRateReport /> },
-        // { name: "Form No. 27EQ", component: <Form27EQ /> },
-        { name: "TCS Receivable", component: <TCSReceivable /> },
-        { name: "TDS Payable", component: <TDSPayable /> },
-        { name: "TDS Receivable", component: <TDSReceivable /> },
-      ],
-    },
+    // {
+    //   title: "GST reports",
+    //   reports: [
+    //     { name: "GSTR 1", component: <GSTROne /> },
+    //     { name: "GSTR 2", component: <GSTTwo /> },
+    //     // { name: "GSTR 3B", component: <GSTR3B /> },
+    //     // { name: "GSTR 9", component: <GSTR9 /> },
+    //     { name: "Sale Summary By HSN", component: <SalesSummaryByHsn /> },
+    //     { name: "SAC Report", component: <SACReport /> },
+    //   ],
+    // },
+    // {
+    //   title: "Item/ Stock report",
+    //   reports: [
+    //     { name: "Stock summary", component: <StockSummary /> },
+    //     { name: "Item Report By Party", component: <ItemReportByParty /> },
+    //     { name: "Item Wise Profit And Loss", component: <ItemWiseProfitLoss /> },
+    //     { name: "Item Category Wise Profit And Loss", component: <ItemCategoryWiseProfitLoss /> },
+    //     { name: "Low Stock Summary", component: <LowStockSummary /> },
+    //     { name: "Stock Detail", component: <StockDetails /> },
+    //     { name: "Item Detail", component: <ItemDetails /> },
+    //     { name: "Sale/ Purchase Report By Item Category", component: <SalePurchaseReportByItem /> },
+    //     { name: "Stock Summary Report By Item Category", component: <StockSummaryReportByItem /> },
+    //     { name: "Item Wise Discount", component: <ItemWiseDiscount /> },
+    //   ],
+    // },
+    // {
+    //   title: "Business Status",
+    //   reports: [
+    //     { name: "Bank Statement", component: <BankStatement /> },
+    //     { name: "Discount Report", component: <DiscountReport /> },
+    //   ],
+    // },
+    // {
+    //   title: "Taxes",
+    //   reports: [
+    //     { name: "GST Report", component: <GSTReport /> },
+    //     { name: "GST Rate Report", component: <GSTRateReport /> },
+    //     // { name: "Form No. 27EQ", component: <Form27EQ /> },
+    //     { name: "TCS Receivable", component: <TCSReceivable /> },
+    //     { name: "TDS Payable", component: <TDSPayable /> },
+    //     { name: "TDS Receivable", component: <TDSReceivable /> },
+    //   ],
+    // },
     // {
     //   title: "Expense report",
     //   reports: [

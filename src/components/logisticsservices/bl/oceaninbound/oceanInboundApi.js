@@ -208,14 +208,18 @@ export const updateOceanInboundProvisional = async (jobNo, hblNo, data) => {
     }
 };
 
-export const deleteOceanInboundProvisional = async (id) => {
+// Delete ALL Ocean Inbound Provisionals for a job/hbl (no provisionalId)
+export const deleteOceanInboundProvisional = async (jobNo, hblNo) => {
     try {
-        // TODO: Verify backend route - may need jobNo and hbl instead of just id
-        const response = await logisticsApi.delete(`/ocean-inbound/houses/provisional/${id}`);
+        if (!jobNo || !hblNo) {
+            throw new Error("jobNo and hblNo are required for deleting Ocean Inbound provisionals");
+        }
+        const url = `/ocean-inbound/houses/job/${jobNo}/hbl/${hblNo}/accounting/provisional`;
+        const response = await logisticsApi.delete(url);
         return response.data;
     } catch (error) {
-        console.error(`Error deleting Ocean Inbound provisional ID ${id}:`, error);
-        return null;
+        console.error(`Error deleting Ocean Inbound provisionals (jobNo: ${jobNo}, hblNo: ${hblNo}):`, error);
+        throw error;
     }
 };
 
@@ -345,14 +349,19 @@ export const updateOceanInboundVendorAccount = async (jobNo, hblNo, payload) => 
     }
 };
 
-export const deleteOceanInboundVendorAccount = async (id) => {
+// Delete Vendor Accounting Entry (uses composite key: jobNo + hbl)
+export const deleteOceanInboundVendorAccount = async (jobNo, hbl) => {
     try {
-        // TODO: Verify backend route - may need jobNo and hbl instead of just id
-        const response = await logisticsApi.delete(`/ocean-inbound/houses/accounting/vendor/${id}`);
+        if (!jobNo || !hbl) {
+            throw new Error("jobNo and hbl are required for deleting Ocean Inbound vendor accounting");
+        }
+        const response = await logisticsApi.delete(
+            `/ocean-inbound/houses/job/${jobNo}/hbl/${hbl}/accounting/vendor-accounting-entry`
+        );
         return response.data;
     } catch (error) {
-        console.error(`Error deleting Ocean Inbound vendor account ID ${id}:`, error);
-        return null;
+        console.error(`Error deleting Ocean Inbound Vendor Account (jobNo: ${jobNo}, hbl: ${hbl}):`, error);
+        throw error;
     }
 };
 

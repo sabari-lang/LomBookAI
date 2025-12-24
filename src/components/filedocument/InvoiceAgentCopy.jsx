@@ -1,49 +1,19 @@
-// Invoiceagent.jsx — resilient analyze+result flow
-import React, {
-    useCallback,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-} from "react";
+// AirInboundJobFromInvoice.jsx
+// Front-end for FastAPI invoice analyzer -> AIR INBOUND JOB fields
 
+import React, { useRef, useState } from "react";
 
-
-
-import { useNavigate } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
-import {
-    clearInvoices,
-    selectAllInvoices,
-    upsertManyInvoices,
-} from "../redux/invoiceslice/InvoiceSlice";
-import { createInvoice } from "./api";
-// import {  } from "./api";
-
-// Import job creation modals
 import JobCreationAirInbound from "../logisticsservices/bl/airinbound/JobCreation";
 import JobCreationAirOutbound from "../logisticsservices/bl/airoutbound/JobCreation";
 import JobCreationSeaInbound from "../logisticsservices/bl/oceaninbound/JobCreationSeaInbound";
 import JobCreationSeaOutbound from "../logisticsservices/bl/oceanoutbound/JobCreationSeaOutbound";
-
-/** CONFIG */
-
-// const ANALYZE_URL =
-//   "https://prod-15.eastus.logic.azure.com:443/workflows/e32830c931124b5f9f1f7800af11b46d/triggers/When_a_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_a_HTTP_request_is_received%2Frun&sv=1.0&sig=dvj6xQ3Z773pS3DFwWQ3U8gPNGfsJh9S9D3x5FCPedA";
+import { useNavigate } from "react-router-dom";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
 
 
-// changing to 
+/** CONFIG **************************************************************/
 
-const ANALYZE_URL =
-    "https://prod-15.eastus.logic.azure.com:443/workflows/e32830c931124b5f9f1f7800af11b46d/triggers/When_a_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2FWhen_a_HTTP_request_is_received%2Frun&sv=1.0&sig=dvj6xQ3Z773pS3DFwWQ3U8gPNGfsJh9S9D3x5FCPedA";
-
-
-
-
-
-
-const POLL_INTERVAL_MS = 2000;
-const MAX_POLL_ATTEMPTS = 150;
+const ANALYZE_URL = "http://ocr.lomtech.ai/analyze";
 
 const ALLOWED_TYPES = new Set([
     "application/pdf",
@@ -54,316 +24,321 @@ const ALLOWED_TYPES = new Set([
     "image/tiff",
     "image/tif",
 ]);
-const MAX_BYTES = 1 * 1024 * 1024; // 1 MB
 
-const BATCH_CONCURRENCY = 5;
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/** JOB INITIAL VALUES **************************************************/
+
+const initialJobValues = {
+    jobNo: "",
+    blType: "Master B/L",
+    consol: "Consol",
+    importType: "Import",
+    mawbNo: "",
+    shipment: "",
+    status: "Open",
+    branch: "HEAD OFFICE",
+
+    shipperName: "",
+    shipperAddress: "",
+    airWayBill: "",
+    agentAddress: "",
+
+    // IMPORTANT: no LOM defaults any more
+    consigneeName: "",
+    consigneeAddress: "",
+
+    notifyName: "",
+    notifyAddress: "",
+
+    issuingAgent: "",
+    iataCode: "",
+    accountNo: "",
+    airportDeparture: "",
+    to1: "",
+    by1: "",
+
+    airportDestination: "",
+    flightNo: "",
+    departureDate: "",
+    arrivalDate: "",
+    handlingInfo: "",
+
+    accountingInfo: "",
+    currency: "",
+    code: "",
+    wtvalPP: "",
+    coll1: "",
+    otherPP: "",
+    coll2: "",
+    rto1: "",
+    rby1: "",
+    rto2: "",
+    rby2: "",
+
+    declaredCarriage: "N.V.D",
+    declaredCustoms: "NVC",
+    insurance: "NIL",
+    freightTerm: "",
+
+    pieces: "",
+    grossWeight: "",
+    kgLb: "KG",
+    rateClass: "Q",
+    chargeableWeight: "",
+    rateCharge: "",
+    arranged: false,
+    totalCharge: "",
+
+    natureGoods: "",
+
+    weightPrepaid: "",
+    weightCollect: "",
+    valuationPrepaid: "",
+    valuationCollect: "",
+    taxPrepaid: "",
+    taxCollect: "",
+    agentPrepaid: "",
+    agentCollect: "",
+    carrierPrepaid: "",
+    carrierCollect: "",
+    totalPrepaid: "",
+    totalCollect: "",
+
+    executedDate: "",
+    placeAt: "CHENNAI",
+    signature: "LOM TECHNOLOGY",
+};
+
+/** HELPERS *************************************************************/
 
 function bytes(n) {
     if (n < 1024) return `${n} B`;
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
     return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
+
 function classNames(...xs) {
     return xs.filter(Boolean).join(" ");
 }
 
-function readFileAsBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const s =
-                typeof reader.result === "string"
-                    ? reader.result.replace(/^data:[^;]+;base64,/, "")
-                    : "";
-            resolve(s);
-        };
-        reader.onerror = () =>
-            reject(reader.error || new Error("File read failed"));
-        reader.readAsDataURL(file);
-    });
-}
-async function runWithLimit(items, limit, worker) {
-    const out = Array(items.length);
-    let i = 0;
-    const runners = new Array(Math.min(limit, items.length))
-        .fill(0)
-        .map(async () => {
-            while (i < items.length) {
-                const idx = i++;
-                out[idx] = await worker(items[idx], idx);
-            }
-        });
-    await Promise.all(runners);
-    return out;
-}
+/** ---- SMALL HELPERS ---- **/
 
-const pick = (o, k, def = "—") =>
-    o && o[k] != null && o[k] !== "" ? o[k] : def;
+const safe = (v) =>
+    v === null || v === undefined ? "" : String(v).trim();
 
-/* ----------------------------- NEW HELPERS ----------------------------- */
-function fv(field, fallback = "") {
-    if (!field) return fallback;
-    if ("valueString" in field) return field.valueString ?? fallback;
-    if ("valueNumber" in field) return field.valueNumber ?? fallback;
-    if ("valueDate" in field) return field.valueDate ?? fallback;
-    if ("valueCurrency" in field)
-        return Number(field.valueCurrency?.amount ?? fallback);
-    if ("value" in field) return field.value ?? fallback;
-    return field.content ?? fallback;
-}
-const num = (v, d = 0) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : d;
-};
+/**
+ * Try to salvage JSON from result.raw even if there is trailing garbage.
+ */
+function safeParseInvoiceRaw(raw) {
+    if (!raw) return null;
+    if (typeof raw === "object") return raw;
+    if (typeof raw !== "string") return null;
 
-// 🔧 CHANGED: robust HSN/HSN-SAC extractor
-const HSN_KEYS = [
-    "HSN",
-    "HSNCode",
-    "HSN_Code",
-    "HSN/SAC",
-    "HSN_SAC",
-    "HSNSAC",
-    "HSN SAC",
-    "HSN-SAC",
-    "SAC",
-    "SACCode",
-    "HSNCodeNo",
-    "HSNCodeNumber",
-];
-function extractHSNFromItem(valueObject) {
-    if (!valueObject || typeof valueObject !== "object") return "";
-    for (const key of HSN_KEYS) {
-        if (key in valueObject) {
-            const raw = String(fv(valueObject[key], "")).trim();
-            if (raw) {
-                const m = raw.match(/\b\d{4,8}\b/);
-                return (m && m[0]) || raw;
-            }
-        }
+    let candidate = raw.trim();
+    const firstBrace = candidate.indexOf("{");
+    const lastBrace = candidate.lastIndexOf("}");
+
+    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+        return null;
     }
-    const maybeInDesc = String(
-        fv(valueObject.Description, fv(valueObject.ITEMS, ""))
-    );
-    const mm = maybeInDesc.match(/\b(HSN|SAC)[^\d]*(\d{4,8})\b/i);
-    if (mm && mm[2]) return mm[2];
-    return "";
-}
 
-// 🔧 CHANGED: extract percent/amount for CGST/SGST/IGST/GST
-const PCT_KEYS = (prefix) => [
-    `${prefix}`,
-    `${prefix}%`,
-    `${prefix}Percent`,
-    `${prefix}_Percent`,
-    `${prefix}Rate`,
-    `${prefix}_Rate`,
-    `${prefix}Pct`,
-    `${prefix}_Pct`,
-];
-const AMT_KEYS = (prefix) => [
-    `${prefix}Amount`,
-    `${prefix}_Amount`,
-    `${prefix}Amt`,
-    `${prefix}_Amt`,
-    `${prefix}Val`,
-];
+    candidate = candidate.slice(firstBrace, lastBrace + 1);
 
-function pickFirst(obj, keys, fallback = undefined) {
-    for (const k of keys) {
-        if (k in obj) {
-            const v = fv(obj[k], fallback);
-            if (v !== undefined && v !== null && v !== "") return v;
-        }
+    // try a light cleanup for trailing commas: ",}" or ",]"
+    candidate = candidate.replace(/,(\s*[}\]])/g, "$1");
+
+    try {
+        return JSON.parse(candidate);
+    } catch (e) {
+        console.error("safeParseInvoiceRaw: JSON.parse failed", e, candidate);
+        return null;
     }
-    return fallback;
 }
 
 /**
- * Normalize line item tax:
- * - gstPercent: overall tax % (existing behaviour preserved)
- * - cgst/sgst/igst percentages & amounts when present
- * - taxAmount: sum of amounts; computed from % if missing
+ * Normalize all the different shapes we have seen into a single "doc" object:
+ *
+ * 1) parsed = { vendor, buyer, invoice, shipping, freight, customs }
+ * 2) parsed = { invoice: { vendor, buyer, invoice_details, shipping_details, ... } }
+ * 3) parsed = { invoice: { vendor, buyer, invoice_id, issue_date, ... } }
  */
-function extractTaxesFromItem(o, lineBase) {
-    const cgstPercent = num(pickFirst(o, PCT_KEYS("CGST")), NaN);
-    const sgstPercent = num(pickFirst(o, PCT_KEYS("SGST")), NaN);
-    const igstPercent = num(pickFirst(o, PCT_KEYS("IGST")), NaN);
+function normalizeDoc(invoiceWrapper) {
+    if (!invoiceWrapper || typeof invoiceWrapper !== "object") return null;
 
-    const cgstAmountRaw = pickFirst(o, AMT_KEYS("CGST"));
-    const sgstAmountRaw = pickFirst(o, AMT_KEYS("SGST"));
-    const igstAmountRaw = pickFirst(o, AMT_KEYS("IGST"));
-
-    const cgstAmount = num(
-        cgstAmountRaw,
-        Number.isFinite(cgstPercent) ? (lineBase * cgstPercent) / 100 : 0
-    );
-    const sgstAmount = num(
-        sgstAmountRaw,
-        Number.isFinite(sgstPercent) ? (lineBase * sgstPercent) / 100 : 0
-    );
-    const igstAmount = num(
-        igstAmountRaw,
-        Number.isFinite(igstPercent) ? (lineBase * igstPercent) / 100 : 0
-    );
-
-    // existing "gst" (overall %) logic:
-    let gstPercent = num(pickFirst(o, PCT_KEYS("GST")), NaN);
-    if (!Number.isFinite(gstPercent)) {
-        const sumPct =
-            (Number.isFinite(cgstPercent) ? cgstPercent : 0) +
-            (Number.isFinite(sgstPercent) ? sgstPercent : 0) +
-            (Number.isFinite(igstPercent) ? igstPercent : 0);
-        gstPercent = sumPct > 0 ? sumPct : NaN;
+    // Case 2/3: everything is inside invoice, and wrapper itself has no vendor/buyer
+    if (
+        invoiceWrapper.invoice &&
+        !invoiceWrapper.vendor &&
+        !invoiceWrapper.buyer &&
+        typeof invoiceWrapper.invoice === "object"
+    ) {
+        return invoiceWrapper.invoice;
     }
 
-    const taxAmount =
-        num(cgstAmount, 0) + num(sgstAmount, 0) + num(igstAmount, 0) ||
-        (Number.isFinite(gstPercent) ? (lineBase * gstPercent) / 100 : 0);
-
-    return {
-        gstPercent: Number.isFinite(gstPercent) ? gstPercent : 0,
-        cgstPercent: Number.isFinite(cgstPercent) ? cgstPercent : 0,
-        sgstPercent: Number.isFinite(sgstPercent) ? sgstPercent : 0,
-        igstPercent: Number.isFinite(igstPercent) ? igstPercent : 0,
-        cgstAmount,
-        sgstAmount,
-        igstAmount,
-        taxAmount,
-    };
+    // Case 1: vendor/buyer/etc are already at top level
+    return invoiceWrapper;
 }
 
-/* ----------------------------- NORMALIZER ----------------------------- */
-// 🔧 CHANGED: preserve existing behaviour and add HSN + detailed tax
-function normalizeFromFR(sourceFile, fr) {
-    const status = fr?.status || "Unknown";
-    const doc = fr?.analyzeResult?.documents?.[0] || {};
-    const f = doc?.fields || {};
+/**
+ * Main mapping: DOCUMENT JSON -> Job form values.
+ */
+function mapInvoiceToJobFromRaw(initial, invoiceWrapper) {
+    const doc = normalizeDoc(invoiceWrapper);
+    if (!doc) return initial;
 
-    const lineItems = (f.Items?.valueArray || []).map((it) => {
-        const o = it?.valueObject || {};
+    // ---- Parties ----
+    const vendor = doc.vendor || {}; // usually the forwarder / LOM or exporter
+    const buyer = doc.buyer || {}; // usually importer / customer
 
-        const quantity = num(fv(o.Quantity, 0), 0);
-        const unitPrice = num(fv(o.UnitPrice, 0), 0);
-        const amount = num(fv(o.Amount, 0), quantity * unitPrice);
-        const lineBase = amount || quantity * unitPrice;
+    // Some JSONs have "shipping_details", some "shipping", some only "freight"
+    const shipping = doc.shipping_details || doc.shipping || {};
+    const freight = doc.freight || doc.shipping_details || {};
+    const shippingWeight =
+        doc.shipping_weight || shipping.shipping_weight || {};
+    const shippingDims =
+        doc.shipping_dimensions || shipping.shipping_dimensions || {};
 
-        const {
-            gstPercent,
-            cgstPercent,
-            sgstPercent,
-            igstPercent,
-            cgstAmount,
-            sgstAmount,
-            igstAmount,
-            taxAmount,
-        } = extractTaxesFromItem(o, lineBase);
-
-        const hsnCode = extractHSNFromItem(o);
-
-        return {
-            ITEMS: fv(o.ITEMS, ""),
-            descriptionOfGoods: fv(o.Description, ""),
-            quantity,
-            unitPrice,
-            amount,
-            gst: gstPercent, // ⬅️ kept as before
-            // 🔧 CHANGED: extra fields (non-breaking)
-            hsnCode,
-            cgstPercent,
-            sgstPercent,
-            igstPercent,
-            cgstAmount,
-            sgstAmount,
-            igstAmount,
-            taxAmount,
+    // ---- Invoice section ----
+    const invSection =
+        doc.invoice ||
+        doc.invoice_details ||
+        {
+            invoice_id: doc.invoice_id,
+            invoice_no: doc.invoice_no,
+            invoice_number: doc.invoice_number,
+            issue_date: doc.issue_date,
+            due_date: doc.due_date,
+            currency: doc.currency,
+            amount: doc.amount,
+            subtotal: doc.subtotal,
+            tax: doc.tax,
+            total: doc.total,
         };
-    });
 
-    // 🔧 CHANGED: capture header-level totals if present
-    const subTotal = num(fv(f.SubTotal, 0), 0);
-    const totalTax = num(fv(f.TotalTax, 0), 0);
+    const jobNo =
+        invSection.invoice_id ||
+        invSection.invoice_no ||
+        invSection.invoice_number ||
+        "";
 
+    // Currency
+    const currency =
+        invSection.currency || freight.currency || doc.currency || "";
+
+    // Total charge
+    const totalCharge =
+        invSection.total ??
+        invSection.amount ??
+        freight.freight_amount ??
+        freight.amount ??
+        (typeof invSection.amount === "object"
+            ? invSection.amount.total ?? invSection.amount.subtotal
+            : undefined) ??
+        "";
+
+    // Dates (for invoice-style docs these are the only dates we have)
+    const departureDate =
+        invSection.issue_date || doc.issue_date || "";
+    const arrivalDate =
+        invSection.due_date || doc.due_date || "";
+
+    // Freight term / Incoterms
+    const freightTerm =
+        freight.incoterms ||
+        doc.shipping_terms ||
+        shipping.freight_term ||
+        "";
+
+    // MAWB / AWB if ever present
+    const mawb =
+        doc.mawb_no ||
+        freight.mawb_no ||
+        shipping.mawb_no ||
+        doc.awb_no ||
+        doc.air_waybill_no ||
+        doc.airway_bill_no ||
+        "";
+
+    // Airports / ports
+    const airportDeparture =
+        freight.origin || doc.shipping_port || shipping.origin || "";
+    const airportDestination =
+        freight.destination || shipping.destination || "";
+
+    // Weight & pieces
+    const grossWeight =
+        freight.gross_weight ??
+        shipping.gross_weight ??
+        shippingWeight.gross_weight ??
+        "";
+    const pieces =
+        freight.packages ??
+        shipping.packages ??
+        shippingDims.pieces ??
+        "";
+
+    // ---- Shipper / Consignee / Notify logic (for these types of docs) ----
+    // For your newest JSON:
+    //   vendor  = LOM LOGISTICS INDIA PRIVATE LIMITED (your office)
+    //   buyer   = DAEWON KANG UP CO LTD (customer)
+    //   shipping.shipper = LOM LOGISTICS INDIA PRIVATE LIMITED (same as vendor)
+    //
+    // So:
+    //   shipperName   = shipping.shipper || vendor.name
+    //   consigneeName = buyer.name
+    //   notify        = consignee
+    const shipperName = shipping.shipper || vendor.name || "";
+    const shipperAddress =
+        shipping.shipper_address || vendor.address || "";
+
+    const consigneeName = buyer.name || "";
+    const consigneeAddress = buyer.address || "";
+
+    const notifyName = consigneeName;
+    const notifyAddress = consigneeAddress;
+
+    // ---- Map into job object ----
     return {
-        sourceFile,
-        operationStatus: status === "succeeded" ? "Success" : status,
-        invoice: {
-            invoiceNumber: fv(f.InvoiceId, ""),
-            vendorName: fv(f.VendorName, fv(f.BillingAddressRecipient, "")),
-            vendorAddress: fv(f.VendorAddress, ""),
-            invoiceDate: fv(f.InvoiceDate, ""),
-            dueDate: fv(f.DueDate, ""),
-            invoiceTotal: num(fv(f.InvoiceTotal, 0), 0),
-            amountDue: num(fv(f.AmountDue, 0), 0),
-            currency:
-                f.InvoiceTotal?.valueCurrency?.currencyCode ||
-                f.AmountDue?.valueCurrency?.currencyCode ||
-                "",
-            subTotal,
-            totalTax,
-            lineItems,
-        },
-        raw: fr,
+        ...initial,
+
+        jobNo: safe(jobNo),
+        mawbNo: safe(mawb),
+        airWayBill: safe(mawb),
+
+        shipperName: safe(shipperName),
+        shipperAddress: safe(shipperAddress),
+
+        consigneeName: safe(consigneeName),
+        consigneeAddress: safe(consigneeAddress),
+
+        notifyName: safe(notifyName),
+        notifyAddress: safe(notifyAddress),
+
+        // vendor is your own address -> agentAddress
+        agentAddress: safe(vendor.address),
+
+        currency: safe(currency),
+        totalCharge: safe(totalCharge),
+
+        departureDate: safe(departureDate),
+        arrivalDate: safe(arrivalDate),
+
+        freightTerm: safe(freightTerm),
+
+        airportDeparture: safe(airportDeparture),
+        airportDestination: safe(airportDestination),
+
+        flightNo: safe(
+            freight.flight_no || shipping.flight_no || doc.flight_no || ""
+        ),
+
+        pieces: safe(pieces),
+        grossWeight: safe(grossWeight),
     };
 }
-/* ---------------------------------------------------------------------- */
 
-async function pollResultUrl(resultUrl) {
-    let attempts = 0;
-    while (true) {
-        const token = sessionStorage.getItem("token");
-        const r = await fetch(resultUrl, {
-            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-        if (!r.ok) throw new Error(`Result ${r.status}`);
-        const data = await r.json();
-        if (data.status === "succeeded" || data.status === "failed") return data;
-        attempts++;
-        if (attempts > MAX_POLL_ATTEMPTS)
-            throw new Error("Timed out waiting for result");
-        await new Promise((s) => setTimeout(s, POLL_INTERVAL_MS));
-    }
-}
-
-// 🔧 CHANGED: include detailed tax fields in payload (gst kept)
-function mapResultToApiPayload(flowItem) {
-    const inv = (flowItem && flowItem?.raw?.invoice) || {};
-    const li = Array.isArray(inv.lineItems) ? inv.lineItems : [];
-    return {
-        invoiceName: inv.invoiceNumber || flowItem?.sourceFile || "",
-        vendorName: inv.vendorName || "",
-        invoiceNumber: inv.invoiceNumber || "",
-        createdAt: inv.invoiceDate || new Date().toISOString(),
-        status: flowItem?.operationStatus || "Pending",
-        total: Number(inv.invoiceTotal ?? 0),
-        currency: inv.currency || "",
-        gst: Number(inv.tax ?? inv.gst ?? 0),
-        subTotal: Number(inv.subTotal ?? 0), // 🔧 CHANGED
-        totalTax: Number(inv.totalTax ?? 0), // 🔧 CHANGED
-        lineItems: li.map((it) => ({
-            description: it.descriptionOfGoods ?? it.description ?? "",
-            quantity: Number(it.quantity ?? 0),
-            unitPrice: Number(it.unitPrice ?? 0),
-            lineTotal: Number(
-                it.amount ?? Number(it.quantity ?? 0) * Number(it.unitPrice ?? 0)
-            ),
-            gst: Number(it.gst ?? 0), // kept
-            // 🔧 CHANGED: extra tax details
-            hsnCode: it.hsnCode || it.hsn || it.hsn_sac || "",
-            cgstPercent: Number(it.cgstPercent ?? 0),
-            sgstPercent: Number(it.sgstPercent ?? 0),
-            igstPercent: Number(it.igstPercent ?? 0),
-            cgstAmount: Number(it.cgstAmount ?? 0),
-            sgstAmount: Number(it.sgstAmount ?? 0),
-            igstAmount: Number(it.igstAmount ?? 0),
-            taxAmount: Number(it.taxAmount ?? 0),
-        })),
-    };
-}
-
-const sameById = (a = [], b = []) =>
-    a.length === b.length && a.every((x, i) => x.id === b[i]?.id);
-
+/** MAIN COMPONENT ******************************************************/
 // Static default data for job creation conversions
 const defaultAirInboundData = {
     jobNo: "JOB-AI-001",
@@ -614,11 +589,18 @@ const defaultSeaOutboundData = {
     dateOfIssue: "2025-02-01",
 };
 
-export default function InvoiceAgent() {
+export default function AirInboundJobFromInvoice() {
+    const [file, setFile] = useState(null);
+    const [jobValues, setJobValues] = useState(initialJobValues);
+    const [rawResponse, setRawResponse] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [parseStatus, setParseStatus] = useState("");
+
     const [files, setFiles] = useState([]);
     const [flowUrl, setFlowUrl] = useState(ANALYZE_URL);
     const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState("");
+
     const [responses, setResponses] = useState([]);
     const [raw, setRaw] = useState("");
     const [expanded, setExpanded] = useState({});
@@ -632,203 +614,130 @@ export default function InvoiceAgent() {
     const navigate = useNavigate();
     const dropRef = useRef(null);
 
-    const dispatch = useDispatch();
-    const invoices = useSelector(selectAllInvoices);
 
-    const onPick = (e) => {
-        const picked = Array.from(e.target.files || []);
-        validateAndSet(picked);
-        e.currentTarget.value = "";
-    };
-    const onDrop = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const picked = Array.from(e.dataTransfer?.files || []);
-        validateAndSet(picked);
-    }, []);
-    const onDragOver = useCallback((e) => {
-        e.preventDefault();
-        e.stopPropagation();
-    }, []);
 
-    function validateAndSet(list) {
-        setError("");
-        const valid = [];
-        for (const f of list) {
-            if (!ALLOWED_TYPES.has(f.type)) {
-                alert(`Unsupported type: ${f.type || "(unknown)"} for "${f.name}"`);
-                continue;
-            }
-            if (f.size > MAX_BYTES) {
-                alert(
-                    `"${f.name}" is too large (${(f.size / 1024 / 1024).toFixed(
-                        2
-                    )} MB). Max allowed is 1 MB.`
-                );
-                continue;
-            }
-            valid.push(f);
+
+
+    const handleFileChange = (e) => {
+        const f = e.target.files?.[0];
+        if (!f) {
+            setFile(null);
+            return;
         }
-        setFiles((prev) => [...prev, ...valid]);
-    }
-    const removeFile = (idx) =>
-        setFiles((prev) => prev.filter((_, i) => i !== idx));
-    const clearAll = () => {
-        setFiles([]);
-        setResponses([]);
-        setRaw("");
+
+        if (!ALLOWED_TYPES.has(f.type)) {
+            notifyInfo(`Unsupported type: ${f.type || "(unknown)"} for "${f.name}"`);
+            return;
+        }
+        if (f.size > MAX_BYTES) {
+            notifyInfo(`"${f.name}" is too large (${bytes(
+                    f.size
+                )}). Max allowed is ${bytes(MAX_BYTES)}.`);
+            return;
+        }
+
+        setFile(f);
         setError("");
-        setExpanded({});
-        setRowSubmitting({});
-        dispatch(clearInvoices());
+        setParseStatus("");
     };
 
-    const submitBatch = async () => {
-        if (!flowUrl) return setError("Analyze URL is required.");
-        if (files?.length === 0)
-            return setError("Please add at least one PDF/image.");
-        setSubmitting(true);
-        setError("");
-        setResponses([]);
-        setRaw("");
-        try {
-            const fileObjs = await runWithLimit(
-                files,
-                BATCH_CONCURRENCY,
-                async (file) => ({
-                    fileName: file.name,
-                    fileContent: await readFileAsBase64(file),
-                    contentType: file.type || "application/octet-stream",
-                })
-            );
-            const body = JSON.stringify({ files: fileObjs });
+    const handleAnalyze = async () => {
+        if (!file) {
+            setError("Please select a PDF or image.");
+            return;
+        }
 
+        setLoading(true);
+        setError("");
+        setRawResponse("");
+        setParseStatus("");
+
+        try {
+            const fd = new FormData();
+            fd.append("file", file);
+
+            // Attach Authorization header if token exists
             const token = sessionStorage.getItem("token");
-            const res = await fetch(flowUrl, {
+            const res = await fetch(ANALYZE_URL, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-                body,
+                body: fd,
+                headers: token ? { Authorization: `Bearer ${token}` } : undefined,
             });
+
             const text = await res.text();
-            setRaw(text);
+            setRawResponse(text);
+            console.log("FastAPI /analyze raw response:", text);
 
-            const jobs = (function extractJobs(payload) {
-                let v = payload;
-                try {
-                    v = JSON.parse(v);
-                } catch { }
-                if (typeof v === "string") {
-                    try {
-                        v = JSON.parse(v);
-                    } catch { }
+            if (!res.ok) {
+                throw new Error(`API error ${res.status}: ${text}`);
+            }
+
+            // 1) Parse top-level JSON
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                console.error("Failed to JSON.parse whole response", e);
+                setParseStatus("❌ Failed to parse top-level JSON");
+                return;
+            }
+
+            const result = data.result || {};
+            let invoiceObj = result.parsed;
+
+            // 2) If parsed is null, salvage from result.raw
+            if (!invoiceObj) {
+                const salvaged = safeParseInvoiceRaw(result.raw);
+                if (!salvaged) {
+                    setParseStatus("❌ Failed to parse result.raw as JSON");
+                    return;
                 }
-                if (v && !Array.isArray(v) && Array.isArray(v.results)) v = v.results;
-                if (
-                    Array.isArray(v) &&
-                    v.every((o) => o && typeof o.resultUrl === "string")
-                )
-                    return v;
-                return null;
-            })(text);
-
-            if (!jobs) {
-                if (!res.ok)
-                    throw new Error(`Analyze flow error ${res.status}: ${text}`);
-                throw new Error("Analyze flow did not return a valid resultUrl array.");
+                invoiceObj = salvaged;
+                setParseStatus("✅ Parsed invoice from result.raw");
+            } else {
+                setParseStatus("✅ Used result.parsed");
             }
 
-            const finalRows = await Promise.all(
-                jobs.map(async (j) => {
-                    const result = await pollResultUrl(j.resultUrl);
-                    return normalizeFromFR(j.fileName, result);
-                })
+            console.log("Parsed invoiceObj:", invoiceObj);
+            const mappedJob = mapInvoiceToJobFromRaw(
+                initialJobValues,
+                invoiceObj
             );
-            setResponses(finalRows);
-        } catch (e) {
-            console.error(e);
-            setError(e?.message || "Upload failed");
+            setJobValues(mappedJob);
+        } catch (err) {
+            console.error(err);
+            setError(err.message || "Failed to analyze file");
         } finally {
-            setSubmitting(false);
+            setLoading(false);
         }
     };
 
-    const makeInvoiceId = (inv, r, i) => {
-        if (inv?.invoiceNumber) return String(inv.invoiceNumber).trim();
-        const file = r?.sourceFile ?? "";
-        const date = inv?.invoiceDate ?? "";
-        const vendor = inv?.vendorName ?? "";
-        const total = inv?.invoiceTotal ?? "";
-        return `${file}__${date}__${vendor}__${total}`.replace(/\s+/g, "_");
-    };
+    const requiredFields = [
+        "jobNo",
+        "blType",
+        "consol",
+        "importType",
+        "status",
+        "branch",
+        "mawbNo",
+        "airWayBill",
 
-    const rows = useMemo(() => {
-        return (responses || []).map((r, i) => {
-            const inv = r?.invoice || {};
-            return {
-                id: makeInvoiceId(inv, r, i),
-                idx: i,
-                sourceFile: r?.sourceFile || "—",
-                status: r?.operationStatus || "—",
-                invoiceNumber: pick(inv, "invoiceNumber"),
-                vendorName: pick(inv, "vendorName"),
-                vendorAddress: pick(inv, "vendorAddress", ""),
-                invoiceDate: pick(inv, "invoiceDate"),
-                dueDate: pick(inv, "dueDate"),
-                invoiceTotal: pick(inv, "invoiceTotal"),
-                amountDue: pick(inv, "amountDue"),
-                currency: pick(inv, "currency", ""),
-                raw: r,
-            };
-        });
-    }, [responses]);
+        "shipperName",
+        "shipperAddress",
+        "consigneeName",
+        "consigneeAddress",
+        "notifyName",
+        "notifyAddress",
 
-    const submitRow = async (rowIdx) => {
-        try {
-            setRowSubmitting((p) => ({ ...p, [rowIdx]: true }));
-            const flowItem = invoices[rowIdx];
-            const payload = mapResultToApiPayload(flowItem);
-            // console.log("payload", flowItem);
-            const saved = await createInvoice(payload);
-            setResponses((prev) => {
-                const cp = [...prev];
-                cp[rowIdx] = { ...cp[rowIdx], apiSaved: true, apiResult: saved };
-                return cp;
-            });
-            alert("Invoice details submitted successfully!");
-            navigate("/invoiceAgentForm");
-        } catch (e) {
-            console.error(e);
-            alert(e);
-            setError(`Row ${rowIdx + 1}: ${e.message}`);
-        } finally {
-            setRowSubmitting((p) => ({ ...p, [rowIdx]: false }));
-        }
-    };
+        "currency",
+        "totalCharge",
+        "departureDate",
+        "arrivalDate",
+        "freightTerm",
+    ];
 
-    useEffect(() => {
-        if (rows?.length) {
-            dispatch(upsertManyInvoices(rows));
-        }
-    }, [rows, dispatch]);
 
-    // Close dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (openDropdown !== null && !event.target.closest('.dropdown')) {
-                setOpenDropdown(null);
-            }
-        };
 
-        if (openDropdown !== null) {
-            document.addEventListener('mousedown', handleClickOutside);
-            return () => {
-                document.removeEventListener('mousedown', handleClickOutside);
-            };
-        }
-    }, [openDropdown]);
 
     const staticInvoiceData = [
         {
@@ -862,135 +771,227 @@ export default function InvoiceAgent() {
             },
         },
     ];
-
-    const invoiceData = invoices?.length ? invoices : rows?.length ? rows : staticInvoiceData;
+    const invoices = [];
+    const invoiceData = staticInvoiceData;
 
     return (
-        <div className="p-4 max-w-7xl mx-auto ">
-
-
-            {/* header/actions */}
-            <div className="tw-flex tw-flex-col sm:tw-flex-row sm:tw-items-center sm:tw-justify-between tw-gap-3 tw-mb-4">
-                <h2 className="tw-text-2xl tw-font-semibold">Invoice</h2>
-
-                <div className="tw-flex tw-gap-2">
-                    <button
-                        className="tw-px-3 tw-py-2 tw-rounded tw-border tw-bg-white hover:tw-bg-gray-50 disabled:tw-opacity-50"
-                        onClick={clearAll}
-                        disabled={submitting}
-                    >
-                        Clear
-                    </button>
-
-                    <button
-                        className="tw-px-4 tw-py-2 tw-rounded tw-bg-blue-600 tw-text-white disabled:tw-opacity-50"
-                        onClick={submitBatch}
-                        disabled={submitting || files?.length === 0}
-                    >
-                        {submitting ? "Processing..." : `Submit ${files?.length || ""} file(s)`}
-                    </button>
-
-                    <button
-                        className="tw-px-4 tw-py-2 tw-rounded tw-bg-blue-600 tw-text-white disabled:tw-opacity-50"
-                        onClick={() => navigate("/invoiceAgentForm")}
-                    >
-                        Invoice Entry
-                    </button>
-
-                    <button
-                        className="tw-px-4 tw-py-2 tw-rounded tw-border tw-bg-gray-200 hover:tw-bg-gray-300"
-                        onClick={() => navigate(-1)}
-                    >
-                        Back
-                    </button>
-                </div>
-            </div>
-
-
-            {/* endpoint input */}
-            <div className="tw-mb-6 tw-border tw-rounded-xl tw-p-4" style={{ display: "none" }}>
-                <div className="tw-text-base tw-font-medium tw-mb-2">Endpoint</div>
-                <label htmlFor="flowUrl" className="tw-text-sm">
-                    Analyze Logic App URL
-                </label>
-                <input
-                    id="flowUrl"
-                    className="tw-mt-2 tw-w-full tw-border tw-rounded tw-px-3 tw-py-2"
-                    placeholder="https://prod-.../invoke?... (invoice-analyze URL)"
-                    value={flowUrl}
-                    onChange={(e) => setFlowUrl(e.target.value)}
-                />
-                <p className="tw-text-xs tw-text-gray-500 tw-mt-2">
-                    This endpoint returns one resultUrl per file. The app will poll them and render the same table as before.
-                </p>
-            </div>
-
-            {/* uploader */}
-            <div className="tw-mb-6 tw-border tw-rounded-xl tw-p-4">
-                <div className="tw-text-base tw-font-medium tw-mb-2">Upload</div>
-
-                <div
-                    ref={dropRef}
-                    onDragOver={onDragOver}
-                    onDrop={onDrop}
-                    className="tw-border-2 tw-border-dashed tw-rounded-2xl tw-p-6 tw-text-center tw-transition hover:tw-bg-gray-50 tw-cursor-pointer"
-                    onClick={() => document.getElementById("file-input")?.click()}
+        <>
+            <div
+                style={{
+                    padding: "1.5rem",
+                    maxWidth: 1200,
+                    margin: "0 auto",
+                    fontFamily:
+                        "system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+                }}
+            >
+                <h2
+                    style={{
+                        fontSize: "1.6rem",
+                        fontWeight: 600,
+                        marginBottom: "0.5rem",
+                    }}
                 >
+                    Job Creation – Air Inbound (Invoice → Job Auto-Fill)
+                </h2>
+                <p style={{ marginBottom: "1.5rem", color: "#4b5563", fontSize: 14 }}>
+                    Upload an invoice PDF or image. It will be sent to{" "}
+                    <code>{ANALYZE_URL}</code>, parsed from <code>result.raw</code>, and
+                    mapped into your Air Inbound job fields.
+                </p>
+
+                {/* Upload card */}
+                <div
+                    style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 12,
+                        padding: 16,
+                        marginBottom: 16,
+                        background: "#f9fafb",
+                    }}
+                >
+                    <div style={{ marginBottom: 8, fontWeight: 500 }}>Upload invoice</div>
                     <input
-                        id="file-input"
                         type="file"
                         accept=".pdf,image/*"
-                        className="tw-hidden"
-                        multiple
-                        onChange={onPick}
+                        onChange={handleFileChange}
+                        style={{ marginBottom: 8 }}
                     />
-                    <p className="tw-text-sm">
-                        Drag & drop PDF/images here, or click to browse. You can add multiple files.
-                    </p>
-                    <p className="tw-text-xs tw-text-gray-500 tw-mt-1">
-                        PDF, PNG, JPG, WEBP, TIFF • Max {bytes(MAX_BYTES)} per file
-                    </p>
+                    {file && (
+                        <div
+                            style={{
+                                fontSize: 12,
+                                color: "#6b7280",
+                                marginBottom: 8,
+                            }}
+                        >
+                            Selected: <strong>{file.name}</strong> ({bytes(file.size)})
+                        </div>
+                    )}
+                    <button
+                        onClick={handleAnalyze}
+                        disabled={!file || loading}
+                        style={{
+                            padding: "8px 16px",
+                            borderRadius: 8,
+                            border: "none",
+                            background: "#2563eb",
+                            color: "white",
+                            fontSize: 14,
+                            cursor: !file || loading ? "not-allowed" : "pointer",
+                            opacity: !file || loading ? 0.6 : 1,
+                        }}
+                    >
+                        {loading ? "Analyzing..." : "Analyze & Fill Job"}
+                    </button>
+
+                    {parseStatus && (
+                        <div
+                            style={{
+                                marginTop: 8,
+                                fontSize: 12,
+                                color: parseStatus.startsWith("✅")
+                                    ? "#15803d"
+                                    : "#b91c1c",
+                            }}
+                        >
+                            {parseStatus}
+                        </div>
+                    )}
+
+                    {error && (
+                        <div
+                            style={{
+                                marginTop: 8,
+                                padding: 10,
+                                borderRadius: 8,
+                                background: "#fee2e2",
+                                color: "#b91c1c",
+                                fontSize: 13,
+                            }}
+                        >
+                            {error}
+                        </div>
+                    )}
                 </div>
 
-                {files?.length > 0 && (
-                    <div className="tw-mt-4">
-                        <div className="tw-text-sm tw-font-medium tw-mb-2">Selected files</div>
-                        <ul className="tw-divide-y tw-rounded tw-border">
-                            {files?.map((f, i) => (
-                                <li
-                                    key={i}
-                                    className="tw-flex tw-items-center tw-justify-between tw-px-3 tw-py-2"
-                                >
-                                    <div className="tw-min-w-0">
-                                        <div className="tw-truncate tw-text-sm tw-font-medium">{f.name}</div>
-                                        <div className="tw-text-xs tw-text-gray-500">
-                                            {f.type || "unknown"} • {bytes(MAX_BYTES)}
-                                        </div>
-                                    </div>
-                                    <button
-                                        className="tw-text-sm tw-text-red-600 hover:tw-underline"
-                                        onClick={() => removeFile(i)}
-                                        disabled={submitting}
-                                    >
-                                        remove
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
+                {/* Required fields table */}
+                <div
+                    style={{
+                        border: "1px solid #e5e7eb",
+                        borderRadius: 12,
+                        overflow: "hidden",
+                        marginBottom: 16,
+                        background: "white",
+                    }}
+                >
+                    <div
+                        style={{
+                            padding: 10,
+                            fontWeight: 500,
+                            background: "#f3f4f6",
+                            borderBottom: "1px solid #e5e7eb",
+                        }}
+                    >
+                        Auto-filled Required Job Fields
                     </div>
-                )}
+                    <div style={{ overflowX: "auto" }}>
+                        <table
+                            style={{
+                                width: "100%",
+                                fontSize: 14,
+                                borderCollapse: "collapse",
+                            }}
+                        >
+                            <thead>
+                                <tr style={{ background: "#f9fafb" }}>
+                                    <th
+                                        style={{
+                                            textAlign: "left",
+                                            padding: "8px 10px",
+                                            borderBottom: "1px solid #e5e7eb",
+                                        }}
+                                    >
+                                        Field
+                                    </th>
+                                    <th
+                                        style={{
+                                            textAlign: "left",
+                                            padding: "8px 10px",
+                                            borderBottom: "1px solid #e5e7eb",
+                                        }}
+                                    >
+                                        Value (from invoice)
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {requiredFields.map((field) => (
+                                    <tr
+                                        key={field}
+                                        style={{ borderTop: "1px solid #f3f4f6" }}
+                                    >
+                                        <td
+                                            style={{
+                                                padding: "6px 10px",
+                                                fontWeight: 500,
+                                                whiteSpace: "nowrap",
+                                                background: "#ffffff",
+                                            }}
+                                        >
+                                            {field}
+                                        </td>
+                                        <td
+                                            style={{
+                                                padding: "6px 10px",
+                                                whiteSpace: "pre-wrap",
+                                                background: "#ffffff",
+                                            }}
+                                        >
+                                            {String(jobValues[field] ?? "")}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-                {error && (
-                    <div className="tw-mt-4 tw-p-3 tw-rounded-lg tw-bg-red-50 tw-text-red-700 tw-text-sm">
-                        {error}
+                {/* Raw response for debugging */}
+                {rawResponse && (
+                    <div
+                        style={{
+                            border: "1px solid #e5e7eb",
+                            borderRadius: 12,
+                            padding: 12,
+                            background: "#f9fafb",
+                        }}
+                    >
+                        <div style={{ fontWeight: 500, marginBottom: 8 }}>
+                            Raw response
+                        </div>
+                        <textarea
+                            style={{
+                                width: "100%",
+                                height: 220,
+                                fontFamily: "Menlo, monospace",
+                                fontSize: 12,
+                                padding: 8,
+                                borderRadius: 8,
+                                border: "1px solid #d1d5db",
+                            }}
+                            readOnly
+                            value={rawResponse}
+                        />
                     </div>
                 )}
             </div>
+
 
 
             {/* results table */}
             {invoiceData?.length > 0 && (
-                <div className="border rounded-xl overflow-hidden">
+                <div className="border rounded-xl overflow-hidden mx-2">
                     <div
                         className="table-responsive"
                         style={{
@@ -1021,22 +1022,7 @@ export default function InvoiceAgent() {
                                     <React.Fragment key={i}>
                                         <tr className="hover:bg-gray-50">
                                             <td className="px-3 py-2 text-left">
-                                                {/* <button
-                                                    className={classNames(
-                                                        "px-2 py-1 rounded",
-                                                        r.apiSaved ? "bg-green-600 text-white" : "bg-indigo-600 text-white",
-                                                        "disabled:opacity-50"
-                                                    )}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const flowItem = invoices[i];
-                                                        const payload = flowItem && flowItem?.raw?.invoice;
-                                                        navigate("/invoiceAgentForm", { state: payload });
-                                                        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-                                                    }}
-                                                >
-                                                    Edit
-                                                </button> */}
+
                                                 <div className="dropdown d-inline-block ms-2" style={{ position: 'relative' }}>
                                                     <button
                                                         className="btn btn-outline-secondary btn-sm dropdown-toggle"
@@ -1174,105 +1160,7 @@ export default function InvoiceAgent() {
                                                 {r.raw?.invoice?.lineItems?.length ?? 0}
                                             </td>
                                         </tr>
-                                        {expanded[r.idx] && (
-                                            <tr className="bg-gray-50/60">
-                                                <td className="px-3 py-3" colSpan={12}>
-                                                    <div className="grid lg:grid-cols-2 gap-6">
-                                                        <div className="border rounded-lg overflow-hidden">
-                                                            <div className="px-3 py-2 text-sm font-medium bg-white border-b">
-                                                                Line items
-                                                            </div>
-                                                            <div className="overflow-x-auto">
-                                                                <table className="min-w-full text-sm">
-                                                                    <thead>
-                                                                        <tr className="text-left bg-white">
-                                                                            <th className="px-3 py-2">ITEMS</th>
-                                                                            <th className="px-3 py-2">HSN/SAC</th>
-                                                                            <th className="px-3 py-2">
-                                                                                Description of goods
-                                                                            </th>
-                                                                            <th className="px-3 py-2 text-right">
-                                                                                Qty
-                                                                            </th>
-                                                                            <th className="px-3 py-2 text-right">
-                                                                                Unit Price
-                                                                            </th>
-                                                                            <th className="px-3 py-2 text-right">
-                                                                                Amount
-                                                                            </th>
-                                                                            <th className="px-3 py-2 text-right">
-                                                                                Tax %
-                                                                            </th>
-                                                                            {/* 🔧 CHANGED: show tax amount */}
-                                                                            <th className="px-3 py-2 text-right">
-                                                                                Tax Amt
-                                                                            </th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody className="divide-y">
-                                                                        {(r.raw?.invoice?.lineItems || []).map(
-                                                                            (li, k) => (
-                                                                                <tr key={k}>
-                                                                                    <td className="px-3 py-2">
-                                                                                        {li.ITEMS || "—"}
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2">
-                                                                                        {li.hsnCode || "—"}
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2">
-                                                                                        {li.descriptionOfGoods || "—"}
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2 text-right">
-                                                                                        {li.quantity ?? "—"}
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2 text-right">
-                                                                                        {li.unitPrice ?? "—"}
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2 text-right">
-                                                                                        {li.amount ?? "—"}
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2 text-right">
-                                                                                        {Number.isFinite(li?.gst)
-                                                                                            ? li.gst
-                                                                                            : "—"}
-                                                                                    </td>
-                                                                                    <td className="px-3 py-2 text-right">
-                                                                                        {Number.isFinite(li?.taxAmount)
-                                                                                            ? li.taxAmount.toFixed(2)
-                                                                                            : "—"}
-                                                                                    </td>
-                                                                                </tr>
-                                                                            )
-                                                                        )}
-                                                                        {(!r.raw?.invoice?.lineItems ||
-                                                                            r.raw.invoice.lineItems.length === 0) && (
-                                                                                <tr>
-                                                                                    <td
-                                                                                        className="px-3 py-3 text-center text-gray-500"
-                                                                                        colSpan={8}
-                                                                                    >
-                                                                                        No line items found
-                                                                                    </td>
-                                                                                </tr>
-                                                                            )}
-                                                                    </tbody>
-                                                                </table>
-                                                            </div>
-                                                        </div>
-                                                        <div className="border rounded-lg overflow-hidden">
-                                                            <div className="px-3 py-2 text-sm font-medium bg-white border-b">
-                                                                Raw JSON
-                                                            </div>
-                                                            <textarea
-                                                                className="w-full h-64 p-2 text-xs font-mono border-0"
-                                                                value={JSON.stringify(r.raw, null, 2)}
-                                                                readOnly
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        )}
+
                                     </React.Fragment>
                                 ))}
                             </tbody>
@@ -1281,16 +1169,6 @@ export default function InvoiceAgent() {
                 </div>
             )}
 
-            {raw && responses.length === 0 && (
-                <div className="mt-6 border rounded-xl p-4">
-                    <div className="text-base font-medium mb-2">Response (raw)</div>
-                    <textarea
-                        className="w-full h-56 p-2 text-xs font-mono border rounded"
-                        readOnly
-                        value={raw}
-                    />
-                </div>
-            )}
 
             {/* Job Creation Modals */}
             {/* Air Inbound Modal - Custom Modal (conditional rendering like AirInboundComp) */}
@@ -1322,6 +1200,694 @@ export default function InvoiceAgent() {
                 editData={editDataSeaOutbound ?? {}}
                 setEditData={setEditDataSeaOutbound}
             />
-        </div>
+        </>
     );
 }
+
+
+
+
+
+// import React, { useCallback, useMemo, useRef, useState } from "react";
+// import { useNavigate } from "react-router-dom";
+// import JobCreationAirInbound from "../logisticsservices/bl/airinbound/JobCreation";
+// import JobCreationAirOutbound from "../logisticsservices/bl/airoutbound/JobCreation";
+// import JobCreationSeaInbound from "../logisticsservices/bl/oceaninbound/JobCreationSeaInbound";
+// import JobCreationSeaOutbound from "../logisticsservices/bl/oceanoutbound/JobCreationSeaOutbound";
+// import { notifyInfo } from "../../utils/notifications";
+
+// const API_URL = "https://ocr.lomtech.ai/analyze";
+
+// const ALLOWED_TYPES = new Set([
+//   "application/pdf",
+//   "image/png",
+//   "image/jpeg",
+//   "image/jpg",
+//   "image/webp",
+//   "image/tiff",
+//   "image/tif",
+// ]);
+
+// const MAX_BYTES = 5 * 1024 * 1024;
+
+// function bytes(n) {
+//   if (n < 1024) return `${n} B`;
+//   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+//   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+// }
+
+// function classNames(...xs) {
+//   return xs.filter(Boolean).join(" ");
+// }
+
+// const pick = (v, def = "—") => (v === null || v === undefined || v === "" ? def : v);
+
+// // Schema keys your UI expects from OCR analyze
+// const JOB_KEYS = [
+//   "jobNo",
+//   "blType",
+//   "mblNo",
+//   "shipperName",
+//   "shipperAddress",
+//   "consigneeName",
+//   "consigneeAddress",
+//   "notifyName",
+//   "notifyAddress",
+//   "portLoading",
+//   "portDischarge",
+//   "placeDelivery",
+//   "finalDestination",
+//   "vesselName",
+//   "voy",
+//   "package",
+//   "grossWeight",
+//   "measurement",
+//   "freightTerm",
+//   "dateOfIssue",
+// ];
+
+// function toSchemaJobCreation(jc) {
+//   const obj = jc && typeof jc === "object" ? jc : {};
+//   const out = {};
+//   for (const k of JOB_KEYS) out[k] = obj[k] ?? null;
+
+//   if (out.measurement === 0) out.measurement = null;
+//   return out;
+// }
+
+// function coerceVal(v) {
+//   if (v === undefined || v === null) return null;
+//   const s = String(v).trim();
+//   if (!s || s === "null") return null;
+//   if (/^-?\d+(\.\d+)?$/.test(s)) return Number(s);
+//   return s;
+// }
+
+// /**
+//  * Extract schema fields from debug.model_preview, even if JSON is truncated.
+//  */
+// function extractJobCreationFromModelPreview(previewText) {
+//   if (!previewText || typeof previewText !== "string") return null;
+
+//   const jc = {};
+//   let foundAny = false;
+
+//   for (const k of JOB_KEYS) {
+//     const re = new RegExp(`"${k}"\\s*:\\s*(null|-?\\d+(?:\\.\\d+)?|"[^"]*")`, "i");
+//     const m = previewText.match(re);
+
+//     if (!m) {
+//       jc[k] = null;
+//       continue;
+//     }
+
+//     let raw = m[1];
+//     if (raw.startsWith('"') && raw.endsWith('"')) raw = raw.slice(1, -1);
+//     jc[k] = coerceVal(raw);
+//     foundAny = true;
+//   }
+
+//   if (!foundAny) return null;
+//   if (jc.measurement === 0) jc.measurement = null;
+//   return jc;
+// }
+
+// function normalizeAnalyzeResponse(apiJson) {
+//   if (!apiJson || typeof apiJson !== "object") {
+//     return { ok: false, jobCreation: null, rawText: "", meta: {}, debug: null, error: "Bad response" };
+//   }
+
+//   if (apiJson.jobCreation && typeof apiJson.jobCreation === "object") {
+//     return {
+//       ok: true,
+//       jobCreation: toSchemaJobCreation(apiJson.jobCreation),
+//       rawText: JSON.stringify(apiJson, null, 2),
+//       meta: apiJson.meta || {},
+//       debug: apiJson.debug || null,
+//       error: apiJson.error || null,
+//     };
+//   }
+
+//   const preview = apiJson?.debug?.model_preview;
+//   const salvaged = extractJobCreationFromModelPreview(preview);
+
+//   if (salvaged) {
+//     return {
+//       ok: true,
+//       jobCreation: toSchemaJobCreation(salvaged),
+//       rawText: JSON.stringify(apiJson, null, 2),
+//       meta: apiJson.meta || {},
+//       debug: apiJson.debug || null,
+//       error: apiJson.error || null,
+//     };
+//   }
+
+//   return {
+//     ok: false,
+//     jobCreation: null,
+//     rawText: JSON.stringify(apiJson, null, 2),
+//     meta: apiJson.meta || {},
+//     debug: apiJson.debug || null,
+//     error: apiJson.error || "Unknown error",
+//   };
+// }
+
+// /** ---------------------------------------------------------------------
+//  *  IMPORTANT: Conversion mappers (InvoiceAgentCopy.jsx style)
+//  *  - Forms expect string inputs, so we cast to string.
+//  *  - We only map what we actually have from OCR schema.
+//  *  - No business logic changes inside job creation modules.
+//  * --------------------------------------------------------------------- */
+// const s = (v) => (v === null || v === undefined ? "" : String(v));
+
+// function mapSchemaToAirInboundEditData(jc) {
+//   const x = jc || {};
+//   return {
+//     // Common identifiers
+//     jobNo: s(x.jobNo),
+//     blType: s(x.blType || "Master B/L"),
+
+//     // In your AirInbound form these exist (seen in InvoiceAgentCopy.jsx)
+//     mawbNo: s(x.mblNo),
+//     airWayBill: s(x.mblNo),
+
+//     shipperName: s(x.shipperName),
+//     shipperAddress: s(x.shipperAddress),
+
+//     consigneeName: s(x.consigneeName),
+//     consigneeAddress: s(x.consigneeAddress),
+
+//     notifyName: s(x.notifyName),
+//     notifyAddress: s(x.notifyAddress),
+
+//     // Map ports to airports (best effort)
+//     airportDeparture: s(x.portLoading),
+//     airportDestination: s(x.portDischarge),
+
+//     // Map packages/weight
+//     pieces: s(x.package),
+//     grossWeight: s(x.grossWeight),
+
+//     freightTerm: s(x.freightTerm),
+
+//     // Dates
+//     departureDate: s(x.dateOfIssue),
+
+//     // Keep these default-like strings if the form relies on them
+//     // (Do NOT number-convert “P/C/” and “N.V.D/NVC/NIL” anywhere)
+//     wtvalPP: s(""),
+//     coll1: s(""),
+//     otherPP: s(""),
+//     coll2: s(""),
+//     declaredCarriage: s("N.V.D"),
+//     declaredCustoms: s("NVC"),
+//     insurance: s("NIL"),
+//   };
+// }
+
+// function mapSchemaToAirOutboundEditData(jc) {
+//   const x = jc || {};
+//   return {
+//     jobNo: s(x.jobNo),
+//     blType: s(x.blType || "Master B/L"),
+
+//     mawbNo: s(x.mblNo),
+//     airWayBill: s(x.mblNo),
+
+//     shipperName: s(x.shipperName),
+//     shipperAddress: s(x.shipperAddress),
+
+//     consigneeName: s(x.consigneeName),
+//     consigneeAddress: s(x.consigneeAddress),
+
+//     notifyName: s(x.notifyName),
+//     notifyAddress: s(x.notifyAddress),
+
+//     airportDeparture: s(x.portLoading),
+//     airportDestination: s(x.portDischarge),
+
+//     pieces: s(x.package),
+//     grossWeight: s(x.grossWeight),
+
+//     freightTerm: s(x.freightTerm),
+//     departureDate: s(x.dateOfIssue),
+
+//     wtvalPP: s(""),
+//     coll1: s(""),
+//     otherPP: s(""),
+//     coll2: s(""),
+//     declaredCarriage: s("N.V.D"),
+//     declaredCustoms: s("NVC"),
+//     insurance: s("NIL"),
+//   };
+// }
+
+// export default function InvoiceAgent() {
+//   const navigate = useNavigate();
+//   const [files, setFiles] = useState([]);
+//   const [submitting, setSubmitting] = useState(false);
+//   const [error, setError] = useState("");
+//   const [results, setResults] = useState([]);
+//   const [expanded, setExpanded] = useState({});
+//   const [openDropdown, setOpenDropdown] = useState(null);
+//   const dropRef = useRef(null);
+
+//   const validateAndSet = (list) => {
+//     setError("");
+//     const valid = [];
+//     for (const f of list) {
+//       if (!ALLOWED_TYPES.has(f.type)) {
+//         notifyInfo(`Unsupported type: ${f.type || "(unknown)"} for "${f.name}"`);
+//         continue;
+//       }
+//       if (f.size > MAX_BYTES) {
+//         notifyInfo(`"${f.name}" is too large (${bytes(f.size)}). Max is ${bytes(MAX_BYTES)}.`);
+//         continue;
+//       }
+//       valid.push(f);
+//     }
+//     setFiles((prev) => [...prev, ...valid]);
+//   };
+
+//   const onPick = (e) => {
+//     const picked = Array.from(e.target.files || []);
+//     validateAndSet(picked);
+//     e.currentTarget.value = "";
+//   };
+
+//   const onDrop = useCallback((e) => {
+//     e.preventDefault();
+//     e.stopPropagation();
+//     const picked = Array.from(e.dataTransfer?.files || []);
+//     validateAndSet(picked);
+//   }, []);
+
+//   const onDragOver = useCallback((e) => {
+//     e.preventDefault();
+//     e.stopPropagation();
+//   }, []);
+
+//   const removeFile = (idx) => setFiles((prev) => prev.filter((_, i) => i !== idx));
+
+//   const clearAll = () => {
+//     setFiles([]);
+//     setResults([]);
+//     setExpanded({});
+//     setError("");
+//   };
+
+//   async function analyzeOneFile(file) {
+//     const form = new FormData();
+//     form.append("file", file, file.name);
+//     form.append("debug", "true");
+
+//     const res = await fetch(API_URL, { method: "POST", body: form });
+//     const text = await res.text();
+
+//     let json;
+//     try {
+//       json = JSON.parse(text);
+//     } catch {
+//       throw new Error(`Non-JSON response (${res.status}). First 200 chars: ${text.slice(0, 200)}`);
+//     }
+
+//     const norm = normalizeAnalyzeResponse(json);
+
+//     return {
+//       fileName: file.name,
+//       contentType: file.type,
+//       ok: norm.ok,
+//       status: norm.ok ? "Success" : "Failed",
+//       jobCreation: norm.jobCreation,
+//       rawText: norm.rawText,
+//       httpStatus: res.status,
+//       meta: norm.meta,
+//       debug: norm.debug,
+//       backendError: norm.error,
+//     };
+//   }
+
+//   const submitBatch = async () => {
+//     if (!files.length) return setError("Please add at least one PDF/image.");
+
+//     setSubmitting(true);
+//     setError("");
+//     setResults([]);
+
+//     try {
+//       const out = [];
+//       for (const f of files) {
+//         // eslint-disable-next-line no-await-in-loop
+//         const one = await analyzeOneFile(f);
+//         out.push(one);
+//         setResults([...out]);
+//       }
+//     } catch (e) {
+//       console.error(e);
+//       setError(e?.message || "Analyze failed");
+//     } finally {
+//       setSubmitting(false);
+//     }
+//   };
+
+//   const JOB_TABLE_FIELDS = [
+//     "jobNo",
+//     "blType",
+//     "mblNo",
+//     "shipperName",
+//     "consigneeName",
+//     "portLoading",
+//     "portDischarge",
+//     "package",
+//     "grossWeight",
+//     "freightTerm",
+//     "dateOfIssue",
+//   ];
+
+//   const rows = useMemo(() => {
+//     return (results || []).map((r, idx) => {
+//       const jc = r.jobCreation || {};
+//       const row = {
+//         id: `${idx}__${r.fileName}`,
+//         idx,
+//         fileName: r.fileName,
+//         status: r.status,
+//         raw: r,
+//       };
+//       JOB_TABLE_FIELDS.forEach((field) => {
+//         row[field] = pick(jc[field]);
+//       });
+//       return row;
+//     });
+//   }, [results]);
+
+//   // --- Modal states (InvoiceAgentCopy.jsx style) ---
+//   const [showAirInboundModal, setShowAirInboundModal] = useState(false);
+//   const [editDataAirInbound, setEditDataAirInbound] = useState(null);
+
+//   // Outbound/Sea are Bootstrap modal components always mounted (like InvoiceAgentCopy.jsx)
+//   const [editDataAirOutbound, setEditDataAirOutbound] = useState(null);
+//   const [editDataSeaInbound, setEditDataSeaInbound] = useState(null);
+//   const [editDataSeaOutbound, setEditDataSeaOutbound] = useState(null);
+
+//   return (
+//     <div className="p-4 max-w-7xl mx-auto">
+//       <div className="tw-flex tw-flex-col sm:tw-flex-row sm:tw-items-center sm:tw-justify-between tw-gap-3 tw-mb-4">
+//         <h2 className="tw-text-2xl tw-font-semibold">Invoice Agent (Analyze → Convert)</h2>
+
+//         <div className="tw-flex tw-gap-2">
+//           <button
+//             className="tw-px-3 tw-py-2 tw-rounded tw-border tw-bg-white hover:tw-bg-gray-50 disabled:tw-opacity-50"
+//             onClick={clearAll}
+//             disabled={submitting}
+//           >
+//             Clear
+//           </button>
+
+//           <button
+//             className="tw-px-4 tw-py-2 tw-rounded tw-bg-blue-600 tw-text-white disabled:tw-opacity-50"
+//             onClick={submitBatch}
+//             disabled={submitting || files.length === 0}
+//           >
+//             {submitting ? "Processing..." : `Submit ${files.length || ""} file(s)`}
+//           </button>
+//         </div>
+//       </div>
+
+//       {/* Uploader */}
+//       <div className="tw-mb-6 tw-border tw-rounded-xl tw-p-4">
+//         <div className="tw-text-base tw-font-medium tw-mb-2">Upload</div>
+
+//         <div
+//           ref={dropRef}
+//           onDragOver={onDragOver}
+//           onDrop={onDrop}
+//           className="tw-border-2 tw-border-dashed tw-rounded-2xl tw-p-6 tw-text-center tw-transition hover:tw-bg-gray-50 tw-cursor-pointer"
+//           onClick={() => document.getElementById("file-input")?.click()}
+//         >
+//           <input id="file-input" type="file" accept=".pdf,image/*" className="tw-hidden" multiple onChange={onPick} />
+//           <p className="tw-text-sm">Drag & drop PDF/images here, or click to browse. You can add multiple files.</p>
+//           <p className="tw-text-xs tw-text-gray-500 tw-mt-1">
+//             PDF, PNG, JPG, WEBP, TIFF • Max {bytes(MAX_BYTES)} per file
+//           </p>
+//         </div>
+
+//         {files.length > 0 && (
+//           <div className="tw-mt-4">
+//             <div className="tw-text-sm tw-font-medium tw-mb-2">Selected files</div>
+//             <ul className="tw-divide-y tw-rounded tw-border">
+//               {files.map((f, i) => (
+//                 <li key={i} className="tw-flex tw-items-center tw-justify-between tw-px-3 tw-py-2">
+//                   <div className="tw-min-w-0">
+//                     <div className="tw-truncate tw-text-sm tw-font-medium">{f.name}</div>
+//                     <div className="tw-text-xs tw-text-gray-500">
+//                       {f.type || "unknown"} • {bytes(f.size)}
+//                     </div>
+//                   </div>
+//                   <button
+//                     className="tw-text-sm tw-text-red-600 hover:tw-underline"
+//                     onClick={() => removeFile(i)}
+//                     disabled={submitting}
+//                   >
+//                     remove
+//                   </button>
+//                 </li>
+//               ))}
+//             </ul>
+//           </div>
+//         )}
+
+//         {error && <div className="tw-mt-4 tw-p-3 tw-rounded-lg tw-bg-red-50 tw-text-red-700 tw-text-sm">{error}</div>}
+//       </div>
+
+//       {/* Results */}
+//       {rows.length > 0 && (
+//         <div className="tw-border tw-rounded-xl tw-overflow-hidden" style={{ minHeight: "50vh" }}>
+//           <div className="tw-overflow-x-auto" style={{ minHeight: "50vh" }}>
+//             <table className="tw-min-w-full tw-text-sm">
+//               <thead className="tw-bg-gray-50">
+//                 <tr className="tw-text-left">
+//                   <th className="tw-px-3 tw-py-2">Actions</th>
+//                   <th className="tw-px-3 tw-py-2">#</th>
+//                   <th className="tw-px-3 tw-py-2">File</th>
+//                   <th className="tw-px-3 tw-py-2">Status</th>
+//                   {JOB_TABLE_FIELDS.map((field) => (
+//                     <th key={field} className="tw-px-3 tw-py-2">
+//                       {field}
+//                     </th>
+//                   ))}
+//                   <th className="tw-px-3 tw-py-2 tw-text-center">Details</th>
+//                 </tr>
+//               </thead>
+
+//               <tbody className="tw-divide-y">
+//                 {rows.map((r, i) => (
+//                   <React.Fragment key={r.id}>
+//                     <tr className="hover:tw-bg-gray-50">
+//                       <td className="tw-px-3 tw-py-2">
+//                         <div className="dropdown d-inline-block" style={{ position: "relative" }}>
+//                           <button
+//                             className="btn btn-outline-secondary btn-sm dropdown-toggle"
+//                             type="button"
+//                             onClick={() => setOpenDropdown(openDropdown === i ? null : i)}
+//                             aria-expanded={openDropdown === i}
+//                           >
+//                             Convert
+//                           </button>
+
+//                           {openDropdown === i && (
+//                             <ul
+//                               className="dropdown-menu show"
+//                               style={{
+//                                 position: "absolute",
+//                                 top: "100%",
+//                                 left: 0,
+//                                 zIndex: 1000,
+//                                 display: "block",
+//                                 minWidth: "240px",
+//                                 maxWidth: "360px",
+//                                 whiteSpace: "normal",
+//                               }}
+//                             >
+//                               {/* AIR INBOUND — conditional modal (same as InvoiceAgentCopy.jsx) */}
+//                               <li>
+//                                 <button
+//                                   className="dropdown-item"
+//                                   type="button"
+//                                   onClick={() => {
+//                                     setOpenDropdown(null);
+//                                     const mapped = mapSchemaToAirInboundEditData(r.raw?.jobCreation || null);
+//                                     setEditDataAirInbound(mapped);
+//                                     setShowAirInboundModal(true);
+//                                   }}
+//                                 >
+//                                   Convert to air-inbound job creation
+//                                 </button>
+//                               </li>
+
+//                               {/* AIR OUTBOUND — Bootstrap modal (same IDs as InvoiceAgentCopy.jsx) */}
+//                               <li>
+//                                 <button
+//                                   className="dropdown-item"
+//                                   type="button"
+//                                   data-bs-toggle="modal"
+//                                   data-bs-target="#createOutboundJobcreationModal"
+//                                   onClick={() => {
+//                                     setOpenDropdown(null);
+//                                     const mapped = mapSchemaToAirOutboundEditData(r.raw?.jobCreation || null);
+//                                     setEditDataAirOutbound(mapped);
+//                                   }}
+//                                 >
+//                                   Convert to air-outbound job creation
+//                                 </button>
+//                               </li>
+
+//                               {/* SEA INBOUND — Bootstrap modal */}
+//                               <li>
+//                                 <button
+//                                   className="dropdown-item"
+//                                   type="button"
+//                                   data-bs-toggle="modal"
+//                                   data-bs-target="#seainCreateJobModal"
+//                                   onClick={() => {
+//                                     setOpenDropdown(null);
+//                                     // Keep as-is: pass through schema (or add a sea mapper later if needed)
+//                                     setEditDataSeaInbound(r.raw?.jobCreation || null);
+//                                   }}
+//                                 >
+//                                   Convert to sea-inbound job creation
+//                                 </button>
+//                               </li>
+
+//                               {/* SEA OUTBOUND — Bootstrap modal */}
+//                               <li>
+//                                 <button
+//                                   className="dropdown-item"
+//                                   type="button"
+//                                   data-bs-toggle="modal"
+//                                   data-bs-target="#seaoutCreateJobModal"
+//                                   onClick={() => {
+//                                     setOpenDropdown(null);
+//                                     setEditDataSeaOutbound(r.raw?.jobCreation || null);
+//                                   }}
+//                                 >
+//                                   Convert to sea-outbound job creation
+//                                 </button>
+//                               </li>
+
+//                               <li>
+//                                 <button
+//                                   className="dropdown-item"
+//                                   type="button"
+//                                   onClick={() => {
+//                                     setOpenDropdown(null);
+//                                     navigate("/sales-invoice", { state: { invoiceData: r } });
+//                                   }}
+//                                 >
+//                                   Convert to Sales
+//                                 </button>
+//                               </li>
+
+//                               <li>
+//                                 <button
+//                                   className="dropdown-item"
+//                                   type="button"
+//                                   onClick={() => {
+//                                     setOpenDropdown(null);
+//                                     navigate("/purchases", { state: { invoiceData: r } });
+//                                   }}
+//                                 >
+//                                   Purchase
+//                                 </button>
+//                               </li>
+//                             </ul>
+//                           )}
+//                         </div>
+//                       </td>
+
+//                       <td className="tw-px-3 tw-py-2">{i + 1}</td>
+
+//                       <td className="tw-px-3 tw-py-2 tw-truncate tw-max-w-[240px]" title={r.fileName}>
+//                         {r.fileName}
+//                       </td>
+
+//                       <td
+//                         className={classNames(
+//                           "tw-px-3 tw-py-2",
+//                           r.status === "Success" ? "tw-text-green-600" : "tw-text-red-600"
+//                         )}
+//                       >
+//                         {r.status}
+//                       </td>
+
+//                       {JOB_TABLE_FIELDS.map((field) => (
+//                         <td key={field} className="tw-px-3 tw-py-2">
+//                           {r[field]}
+//                         </td>
+//                       ))}
+
+//                       <td className="tw-px-3 tw-py-2 tw-text-center">
+//                         <button
+//                           className="tw-px-2 tw-py-1 tw-rounded tw-border tw-bg-white hover:tw-bg-gray-50"
+//                           onClick={() => setExpanded((p) => ({ ...p, [r.idx]: !p[r.idx] }))}
+//                           type="button"
+//                         >
+//                           {expanded[r.idx] ? "Hide" : "View"}
+//                         </button>
+//                       </td>
+//                     </tr>
+
+//                     {expanded[r.idx] && (
+//                       <tr className="tw-bg-gray-50/60">
+//                         <td className="tw-px-3 tw-py-3" colSpan={4 + JOB_TABLE_FIELDS.length + 1}>
+//                           <div className="tw-grid lg:tw-grid-cols-2 tw-gap-6">
+//                             <div className="tw-border tw-rounded-lg tw-overflow-hidden">
+//                               <div className="tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-bg-white tw-border-b">
+//                                 jobCreation (schema)
+//                               </div>
+//                               <pre className="tw-text-xs tw-p-3 tw-overflow-auto tw-max-h-[360px]">
+//                                 {JSON.stringify(r.raw?.jobCreation ?? null, null, 2)}
+//                               </pre>
+//                             </div>
+
+//                             <div className="tw-border tw-rounded-lg tw-overflow-hidden">
+//                               <div className="tw-px-3 tw-py-2 tw-text-sm tw-font-medium tw-bg-white tw-border-b">
+//                                 Backend response (debug)
+//                               </div>
+//                               <textarea
+//                                 className="tw-w-full tw-h-64 tw-p-2 tw-text-xs tw-font-mono tw-border-0"
+//                                 value={r.raw?.rawText || ""}
+//                                 readOnly
+//                               />
+//                             </div>
+//                           </div>
+//                         </td>
+//                       </tr>
+//                     )}
+//                   </React.Fragment>
+//                 ))}
+//               </tbody>
+//             </table>
+//           </div>
+//         </div>
+//       )}
+
+//       {/* AIR INBOUND — conditional modal (like InvoiceAgentCopy.jsx) */}
+//       {showAirInboundModal && (
+//         <JobCreationAirInbound
+//           onClose={() => {
+//             setShowAirInboundModal(false);
+//             setEditDataAirInbound(null);
+//           }}
+//           editData={editDataAirInbound}
+//           setEditData={setEditDataAirInbound}
+//         />
+//       )}
+
+//       {/* BOOTSTRAP MODALS — always mounted (like InvoiceAgentCopy.jsx) */}
+//       <JobCreationAirOutbound editData={editDataAirOutbound ?? {}} setEditData={setEditDataAirOutbound} />
+//       <JobCreationSeaInbound editData={editDataSeaInbound ?? {}} setEditData={setEditDataSeaInbound} />
+//       <JobCreationSeaOutbound editData={editDataSeaOutbound ?? {}} setEditData={setEditDataSeaOutbound} />
+//     </div>
+//   );
+// }

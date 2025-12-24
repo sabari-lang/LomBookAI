@@ -13,6 +13,8 @@ import { MOBILE_OPTIONAL, onlyDigits } from "../../../../../../../utils/validati
 import { createAirOutboundCustomerAccount, updateAirOutboundCustomerAccount, getAirOutboundProvisionals } from "../../../airOutboundApi";
 import { extractItems } from "../../../../../../../utils/extractItems";
 
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+
 const safeNum = (v) => Number(v ?? 0);
 const safeStr = (v) => (v ?? "").toString();
 const safeArr = (v) => (Array.isArray(v) ? v : []);
@@ -30,6 +32,7 @@ const RaiseAccountingEntryOut = ({ editData }) => {
     const hawbNo = safeStr(storedHouse?.hawb || storedHouse?.hawbNo);
 
     const isEditing = Boolean(editData?.id || editData?._id);
+    
     const [open, setOpen] = useState(false);
 
     // Helper function to format date for input[type="date"]
@@ -201,7 +204,7 @@ const RaiseAccountingEntryOut = ({ editData }) => {
                 jobNo,
                 hawbNo,
             ]);
-            alert("Air Outbound customer accounting entry created");
+            notifySuccess("Air Outbound customer accounting entry created");
             
             // Close modal using working pattern from CreateHouse.jsx
             const modalElement = document.getElementById("raiseCustomerAccountingModalOut");
@@ -236,7 +239,7 @@ const RaiseAccountingEntryOut = ({ editData }) => {
                 jobNo,
                 hawbNo,
             ]);
-            alert("Air Outbound customer accounting entry updated");
+            notifySuccess("Air Outbound customer accounting entry updated");
             
             // Close modal using working pattern from CreateHouse.jsx
             const modalElement = document.getElementById("raiseCustomerAccountingModalOut");

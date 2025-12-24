@@ -12,6 +12,8 @@ import Pagination from "../../../../../../common/pagination/Pagination";
 import { extractItems } from "../../../../../../../utils/extractItems";
 import { extractPagination } from "../../../../../../../utils/extractPagination";
 import { deleteAirOutboundVendorAccount, getAirOutboundVendorAccounts } from "../../../airOutboundApi";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+import { confirm } from "../../../../../../../utils/confirm";
 
 const AccountingEntryVendorOut = () => {
     const navigate = useNavigate();
@@ -124,22 +126,27 @@ const AccountingEntryVendorOut = () => {
 
     // DELETE
     const deleteMutation = useMutation({
-        mutationFn: ({ id }) => deleteAirOutboundVendorAccount(id),
+        mutationFn: () => deleteAirOutboundVendorAccount(jobNo, hawb),
 
         onSuccess: () => {
-            alert("Deleted successfully!");
+            notifySuccess("Deleted successfully!");
             refresh();
         },
-        onError: () => {
-            alert("Delete failed");
+        onError: (error) => {
+            console.error("Delete failed:", error);
+            notifyError("Delete failed: " + (error?.message || "Unknown error"));
         },
     });
 
-    const handleDelete = (row) => {
-        if (!row?.id) return;
-        if (!window.confirm("Delete this entry?")) return;
+    const handleDelete = async (row) => {
+        if (!jobNo || !hawb) {
+            notifyError("Job No and HAWB are required for deletion");
+            return;
+        }
+        const confirmed = await confirm("Delete this vendor accounting entry?");
+        if (!confirmed) return;
 
-        deleteMutation.mutate({ id: row.id });
+        deleteMutation.mutate();
     };
 
     // VIEW / EDIT

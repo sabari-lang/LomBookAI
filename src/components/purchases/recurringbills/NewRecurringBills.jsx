@@ -9,7 +9,8 @@ import { getItems } from "../../items/api";
 import { extractItems } from "../../../utils/extractItems";
 import { getCustomers } from "../../sales/api";
 import { calculateLineAmount, calculateSubtotal, calculateDiscountAmount, calculateTaxAmount, calculateGrandTotal, toNumber, parseTaxPercentage } from "../../../utils/calculations";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
+// Removed refreshKeyboard import - auto-refresh disabled by default
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const DEFAULTS = {
   vendorName: "",
@@ -50,9 +51,6 @@ const NewRecurringBills = () => {
   const isNewFromSource = state?.isNew === true;
   const isEditing = Boolean(editId) && !isNewFromSource;
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
-
   const {
     control,
     handleSubmit,
@@ -80,6 +78,8 @@ const NewRecurringBills = () => {
         setUploadedFiles(state.attachments);
         setValue("attachments", state.attachments);
       }
+      // Removed refreshKeyboard() - auto-refresh disabled by default to prevent blinking
+      // Use manual "Fix keyboard input" button in Settings if needed
       return;
     }
 
@@ -115,7 +115,7 @@ const NewRecurringBills = () => {
     mutationFn: (payload) => createRecurringBill(payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["recurringBills"]);
-      alert("Recurring bill created successfully");
+      notifySuccess("Recurring bill created successfully");
       reset(DEFAULTS);
       setUploadedFiles([]);
       setValue("attachments", []);
@@ -128,7 +128,7 @@ const NewRecurringBills = () => {
     mutationFn: ({ id, payload }) => updateRecurringBill(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["recurringBills"]);
-      alert("Recurring bill updated successfully");
+      notifySuccess("Recurring bill updated successfully");
       navigate("/recurringbills");
     },
     onError: (error) => handleProvisionalError(error, "Update Recurring Bill"),

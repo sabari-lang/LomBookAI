@@ -10,6 +10,7 @@ import { getBillWiseProfit } from "../reportAPI";
 import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const BillwiseProfit = () => {
     const [fromDate, setFromDate] = useState("2025-11-01");
@@ -21,17 +22,6 @@ const BillwiseProfit = () => {
     const [showPreview, setShowPreview] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const tempContainer = useRef(null);
-
-    const fallbackRows = useMemo(
-        () => [
-            { id: 1, date: "2025-11-01", invoiceNo: "INV001", party: "ABC Traders", totalAmount: 25000, profit: 2500 },
-            { id: 2, date: "2025-11-02", invoiceNo: "INV002", party: "XYZ Enterprises", totalAmount: 42000, profit: -1200 },
-            { id: 3, date: "2025-11-03", invoiceNo: "INV003", party: "LMN Supplies", totalAmount: 31000, profit: 4500 },
-            { id: 4, date: "2025-11-03", invoiceNo: "INV004", party: "Green Mart", totalAmount: 27500, profit: 1200 },
-            { id: 5, date: "2025-11-04", invoiceNo: "INV005", party: "Bright Distributors", totalAmount: 15500, profit: 800 },
-        ],
-        []
-    );
 
     const requestParams = useMemo(() => {
         const params = {
@@ -60,7 +50,7 @@ const BillwiseProfit = () => {
 
     const apiRows = extractItems(fetched);
     const pagination = extractPagination(fetched);
-    const tableRows = apiRows.length > 0 ? apiRows : fallbackRows;
+    const tableRows = apiRows;
     const totalRows = Number.isFinite(pagination.totalCount)
         ? pagination.totalCount
         : tableRows.length;
@@ -189,7 +179,7 @@ const BillwiseProfit = () => {
                         setShowPreview(true);
                 } catch (err) {
                         console.error(err);
-                        alert("Failed to generate PDF");
+                        notifyError("Failed to generate PDF");
                 } finally {
                         if (tempContainer.current) {
                                 document.body.removeChild(tempContainer.current);

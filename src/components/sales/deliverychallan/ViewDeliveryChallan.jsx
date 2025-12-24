@@ -16,6 +16,8 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 const ViewDeliveryChallan = () => {
   const navigate = useNavigate();
@@ -107,9 +109,10 @@ const ViewDeliveryChallan = () => {
 
   const handleBulkDelete = async () => {
     if (selectedRows.length === 0)
-      return alert("Please select at least one record");
+      return notifyInfo("Please select at least one record");
 
-    if (!window.confirm("Are you sure you want to delete?")) return;
+    const confirmed = await confirm("Are you sure you want to delete?");
+    if (!confirmed) return;
 
     await Promise.all(selectedRows.map((r) => deleteMutation.mutateAsync(r.id)));
   };
@@ -211,6 +214,13 @@ const ViewDeliveryChallan = () => {
   const handleRowClick = (row) =>
     navigate("/newdeliverychallan", { state: row._original });
 
+  // ---------------- DELETE HANDLER ----------------
+  const handleDeleteSingle = async (rowId) => {
+    const confirmed = await confirm("Delete this challan?");
+    if (!confirmed) return;
+    deleteMutation.mutate(rowId);
+  };
+
   // ---------------- TABLE COLUMNS ----------------
   const columns = [
     {
@@ -286,9 +296,7 @@ const ViewDeliveryChallan = () => {
             className="btn btn-sm btn-outline-danger"
             onClick={(e) => {
               e.stopPropagation();
-              if (window.confirm("Delete this challan?")) {
-                deleteMutation.mutate(row.id);
-              }
+              handleDeleteSingle(row.id);
             }}
           >
             <i className="bi bi-trash"></i>

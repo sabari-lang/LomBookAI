@@ -1,9 +1,13 @@
 import React, { useEffect } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+
+import { useAppBack } from "../../hooks/useAppBack";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
 
 const ItemGroupsNew = () => {
-    const navigate = useNavigate();
+    // Report filter/create-only form - always unlock on mount
+    
+    const { goBack } = useAppBack();
 
     const { control, handleSubmit, watch, setValue } = useForm({
         defaultValues: {
@@ -102,7 +106,7 @@ const ItemGroupsNew = () => {
 
     const onSubmit = (data) => {
         console.log("✅ Final Item Group:", data);
-        alert("Item Group saved successfully!");
+        notifySuccess("Item Group saved successfully!");
     };
 
     return (
@@ -337,7 +341,7 @@ const ItemGroupsNew = () => {
                     <button
                         type="button"
                         className="btn btn-light border btn-sm px-4"
-                        onClick={() => navigate(-1)}
+                        onClick={() => goBack()}
                     >
                         Cancel
                     </button>

@@ -13,6 +13,8 @@ import { handleProvisionalError } from "../../../../../../../utils/handleProvisi
 import { extractItems } from "../../../../../../../utils/extractItems";
 import { extractPagination } from "../../../../../../../utils/extractPagination";
 import { getOceanInboundArrivalNotices, deleteOceanInboundArrivalNotice } from "../../../oceanInboundApi";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
+import { confirm } from "../../../../../../../utils/confirm";
 
 const ArrivalNoticeSeIn = () => {
     const queryClient = useQueryClient();
@@ -52,17 +54,18 @@ const ArrivalNoticeSeIn = () => {
         mutationFn: () => deleteOceanInboundArrivalNotice(jobNo, hblNo),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["oceanInboundArrivalNotice", jobNo, hblNo] });
-            alert("Arrival Notice deleted successfully");
+            notifySuccess("Arrival Notice deleted successfully");
         },
         onError: (error) => handleProvisionalError(error, "Delete Arrival Notice"),
     });
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
         if (!jobNo || !hblNo) {
-            alert("Job No and HBL No are required");
+            notifyError("Job No and HBL No are required");
             return;
         }
-        if (window.confirm("Are you sure you want to delete this Arrival Notice?")) {
+        const confirmed = await confirm("Are you sure you want to delete this Arrival Notice?");
+    if (confirmed) {
             deleteMutation.mutate();
         }
     };

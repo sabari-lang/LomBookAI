@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const StockSummaryReportByItem = () => {
     const [fromDate, setFromDate] = useState("2025-11-01");
@@ -147,7 +148,7 @@ const StockSummaryReportByItem = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to generate PDF");
+            notifyError("Failed to generate PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);

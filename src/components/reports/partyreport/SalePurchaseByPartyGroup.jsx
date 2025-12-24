@@ -1,5 +1,6 @@
-import React, { useState, useRef } from "react";
-import { useForm, Controller } from "react-hook-form";
+import React, { useState, useRef, useMemo } from "react";
+import { useForm, Controller, useWatch } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import DataTable from "react-data-table-component";
 import "bootstrap/dist/css/bootstrap.min.css";
 import * as XLSX from "xlsx";
@@ -7,38 +8,102 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
 
+import { getPartySalePurchaseByGroup } from "../reportAPI";
+import { extractItems } from "../../../utils/extractItems";
+import { extractPagination } from "../../../utils/extractPagination";
+import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 
 const SalePurchaseByPartyGroup = () => {
+    // Report filter form - always unlock on mount
+    
+
+    const today = new Date();
+    const defaultToDate = today.toISOString().slice(0, 10);
+    const defaultFromDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+
     const { control } = useForm({
         defaultValues: {
-            fromDate: "2025-11-01",
-            toDate: "2025-11-30",
+            fromDate: defaultFromDate,
+            toDate: defaultToDate,
             firm: "All Firms",
             category: "All Categories",
             item: "All Items",
+            searchText: "",
         },
     });
 
-    const mockData = [
-        { id: 1, groupName: "General", saleAmount: 0, purchaseAmount: 17700 },
-        { id: 2, groupName: "Retailers", saleAmount: 12300, purchaseAmount: 15800 },
-        { id: 3, groupName: "Wholesalers", saleAmount: 18400, purchaseAmount: 13200 },
-    ];
+    const fromDate = useWatch({ control, name: "fromDate" });
+    const toDate = useWatch({ control, name: "toDate" });
+    const firm = useWatch({ control, name: "firm" });
+    const category = useWatch({ control, name: "category" });
+    const item = useWatch({ control, name: "item" });
+    const searchText = useWatch({ control, name: "searchText" });
 
-    const totalSale = mockData.reduce((sum, i) => sum + i.saleAmount, 0);
-    const totalPurchase = mockData.reduce((sum, i) => sum + i.purchaseAmount, 0);
-
+    const [page, setPage] = useState(1);
+    const [perPage, setPerPage] = useState(25);
     const [pdfUrl, setPdfUrl] = useState(null);
     const [showPreview, setShowPreview] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const tempContainer = useRef(null);
 
+    const requestParams = useMemo(() => {
+        const params = { Page: page, PageSize: perPage };
+        if (fromDate) params.FromDate = fromDate;
+        if (toDate) params.ToDate = toDate;
+        if (firm && firm !== "All Firms") params.Firm = firm;
+        if (category && category !== "All Categories") params.Category = category;
+        if (item && item !== "All Items") params.Item = item;
+        return params;
+    }, [fromDate, toDate, firm, category, item, page, perPage]);
+
+    const queryKey = useMemo(
+        () => ["report-sale-purchase-by-group", fromDate, toDate, firm, category, item, page, perPage],
+        [fromDate, toDate, firm, category, item, page, perPage]
+    );
+
+    const { data: fetched, isLoading } = useQuery({
+        queryKey,
+        queryFn: () => getPartySalePurchaseByGroup(requestParams),
+        enabled: Boolean(fromDate && toDate),
+        keepPreviousData: true,
+        retry: 1,
+        onError: (error) => handleProvisionalError(error, "Sale Purchase by Party Group"),
+    });
+
+    const apiRows = extractItems(fetched);
+    const pagination = extractPagination(fetched);
+    const tableRows = apiRows;
+    const totalRows = Number.isFinite(pagination.totalCount) ? pagination.totalCount : tableRows.length;
+
+    const filteredData = useMemo(() => {
+        const text = (searchText ?? "").toLowerCase();
+        if (!text) return tableRows;
+        return tableRows.filter((row) => (row.groupName ?? "").toLowerCase().includes(text));
+    }, [searchText, tableRows]);
+
+    const totalSale = useMemo(
+        () => filteredData.reduce((sum, row) => sum + Number(row.saleAmount ?? row.saleValue ?? 0), 0),
+        [filteredData]
+    );
+    const totalPurchase = useMemo(
+        () => filteredData.reduce((sum, row) => sum + Number(row.purchaseAmount ?? row.purchaseValue ?? 0), 0),
+        [filteredData]
+    );
+
+    const formatCurrency = (value) => `₹ ${Number(value ?? 0).toLocaleString()}`;
+
+    const handlePageChange = (newPage) => setPage(newPage);
+    const handlePerRowsChange = (newPerPage) => {
+        setPerPage(newPerPage);
+        setPage(1);
+    };
+
     // ===== Excel Report Download =====
     const downloadExcel = () => {
-        const worksheet = XLSX.utils.json_to_sheet(mockData);
+        const worksheet = XLSX.utils.json_to_sheet(filteredData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "SalePurchaseByPartyGroup");
-        XLSX.writeFile(workbook, `SalePurchaseByPartyGroup_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        XLSX.writeFile(workbook, `SalePurchaseByPartyGroup_${fromDate}_${toDate}.xlsx`);
     };
 
     // ===== PDF Generate Logic =====
@@ -71,21 +136,21 @@ const SalePurchaseByPartyGroup = () => {
             </tr>
           </thead>
           <tbody>
-            ${mockData
-                    .map(
-                        (r, i) => `
+            ${filteredData
+                .map(
+                    (r, i) => `
               <tr>
                 <td>${i + 1}</td>
-                <td>${r.groupName}</td>
-                <td>${r.saleAmount.toLocaleString()}</td>
-                <td>${r.purchaseAmount.toLocaleString()}</td>
+                <td>${r.groupName ?? ""}</td>
+                <td>${formatCurrency(r.saleAmount ?? r.saleValue)}</td>
+                <td>${formatCurrency(r.purchaseAmount ?? r.purchaseValue)}</td>
               </tr>`
-                    )
-                    .join("")}
+                )
+                .join("")}
             <tr class="fw-bold">
               <td colspan="2" class="text-start">Total</td>
-              <td>${totalSale.toLocaleString()}</td>
-              <td>${totalPurchase.toLocaleString()}</td>
+              <td>${formatCurrency(totalSale)}</td>
+              <td>${formatCurrency(totalPurchase)}</td>
             </tr>
           </tbody>
         </table>
@@ -119,19 +184,19 @@ const SalePurchaseByPartyGroup = () => {
         if (action === "save") {
             const link = document.createElement("a");
             link.href = pdfUrl;
-            link.download = "SalePurchaseByPartyGroup.pdf";
+            link.download = `SalePurchaseByPartyGroup_${fromDate}_${toDate}.pdf`;
             link.click();
         }
     };
 
     const columns = [
-        { name: "GROUP NAME", selector: (row) => row.groupName, sortable: true },
-        { name: "SALE AMOUNT", selector: (row) => `₹ ${row.saleAmount.toLocaleString()}`, sortable: true },
+        { name: "GROUP NAME", selector: (row) => row.groupName ?? "", sortable: true },
+        { name: "SALE AMOUNT", selector: (row) => formatCurrency(row.saleAmount ?? row.saleValue), sortable: true },
         {
             name: "PURCHASE AMOUNT",
-            selector: (row) => `₹ ${row.purchaseAmount.toLocaleString()}`,
+            selector: (row) => formatCurrency(row.purchaseAmount ?? row.purchaseValue),
             sortable: true,
-            conditionalCellStyles: [{ when: (row) => row.purchaseAmount > 0, style: { color: "red" } }],
+            conditionalCellStyles: [{ when: (row) => (row.purchaseAmount ?? row.purchaseValue ?? 0) > 0, style: { color: "red" } }],
         },
     ];
 
@@ -175,8 +240,6 @@ const SalePurchaseByPartyGroup = () => {
                         render={({ field }) => (
                             <select {...field} className="form-select form-select-sm" style={{ width: "150px" }}>
                                 <option>All Firms</option>
-                                <option>ABC Traders</option>
-                                <option>XYZ Enterprises</option>
                             </select>
                         )}
                     />
@@ -205,9 +268,6 @@ const SalePurchaseByPartyGroup = () => {
                     render={({ field }) => (
                         <select {...field} className="form-select form-select-sm" style={{ width: "200px" }}>
                             <option>All Categories</option>
-                            <option>Electronics</option>
-                            <option>Hardware</option>
-                            <option>Furniture</option>
                         </select>
                     )}
                 />
@@ -218,30 +278,53 @@ const SalePurchaseByPartyGroup = () => {
                     render={({ field }) => (
                         <select {...field} className="form-select form-select-sm" style={{ width: "200px" }}>
                             <option>All Items</option>
-                            <option>Item 1</option>
-                            <option>Item 2</option>
                         </select>
                     )}
                 />
 
-                <input
-                    type="text"
-                    placeholder="Search..."
-                    className="form-control form-control-sm"
-                    style={{ maxWidth: "250px", flex: "1" }}
+                <Controller
+                    name="searchText"
+                    control={control}
+                    render={({ field }) => (
+                        <input
+                            {...field}
+                            type="text"
+                            placeholder="Search..."
+                            className="form-control form-control-sm"
+                            style={{ maxWidth: "250px", flex: "1" }}
+                        />
+                    )}
                 />
             </div>
 
             {/* ===== Table Section ===== */}
             <h6 className="fw-semibold mb-2">SALE PURCHASE BY PARTY GROUP</h6>
             <div className="bg-white rounded-3 shadow-sm border overflow-hidden p-3" style={{ minHeight: "50vh" }}>
-                <DataTable columns={columns} data={mockData} highlightOnHover striped dense pagination customStyles={customStyles} />
+                <DataTable
+                    columns={columns}
+                    data={filteredData}
+                    highlightOnHover
+                    striped
+                    dense
+                    pagination
+                    paginationServer
+                    paginationTotalRows={totalRows}
+                    paginationPerPage={perPage}
+                    paginationDefaultPage={page}
+                    paginationRowsPerPageOptions={[25, 50, 100]}
+                    onChangePage={handlePageChange}
+                    onChangeRowsPerPage={handlePerRowsChange}
+                    customStyles={customStyles}
+                    progressPending={isLoading}
+                    noDataComponent={<div className="py-3 text-center text-muted">No records found</div>}
+                    persistTableHead
+                />
             </div>
 
             {/* ===== Totals Footer ===== */}
             <div className="d-flex flex-column flex-md-row justify-content-between mt-2 fw-bold text-center text-md-start gap-2">
-                <span className="text-success">Total Sale Amount: ₹ {totalSale.toLocaleString()}</span>
-                <span className="text-danger">Total Purchase Amount: ₹ {totalPurchase.toLocaleString()}</span>
+                <span className="text-success">Total Sale Amount: {formatCurrency(totalSale)}</span>
+                <span className="text-danger">Total Purchase Amount: {formatCurrency(totalPurchase)}</span>
             </div>
 
             {/* PDF Preview Modal */}

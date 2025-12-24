@@ -8,8 +8,8 @@ import { getItems } from "../../items/api";
 import { extractItems } from "../../../utils/extractItems";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { calculateLineAmount, calculateSubtotal, calculateTaxAmount, calculateGrandTotal, toNumber } from "../../../utils/calculations";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
-import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+// Removed refreshKeyboard import - auto-refresh disabled by default
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const NewDeliveryChallan = () => {
   const { state } = useLocation();
@@ -46,14 +46,9 @@ const NewDeliveryChallan = () => {
     watch,
     reset,
     setValue,
-    getValues,
     handleSubmit,
     formState: { errors },
-  } = useForm({ 
-    defaultValues: DEFAULTS,
-    mode: "onBlur",
-    reValidateMode: "onChange",
-  });
+  } = useForm({ defaultValues: DEFAULTS });
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -63,8 +58,6 @@ const NewDeliveryChallan = () => {
   const editId = state?.id || null;
   const isEditing = Boolean(editId);
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
 
   const [uploadedFiles, setUploadedFiles] = useState([]);
 
@@ -97,6 +90,8 @@ const NewDeliveryChallan = () => {
       reset({ ...DEFAULTS, ...mappedState });
       setUploadedFiles(mappedState.files);
       setValue("files", mappedState.files);
+      // Removed refreshKeyboard() - auto-refresh disabled by default to prevent blinking
+      // Use manual "Fix keyboard input" button in Settings if needed
       return;
     }
 
@@ -107,8 +102,7 @@ const NewDeliveryChallan = () => {
     });
     setUploadedFiles([]);
     setValue("files", []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId]);
+  }, [state, reset, setValue]);
 
   // Fetch customers for select
   const { data: fetchedCustomers } = useQuery({
@@ -131,23 +125,21 @@ const NewDeliveryChallan = () => {
 
   const itemOptions = extractItems(fetchedItemsRaw) || [];
 
-  // Live watch for nested items - debounced to prevent lag
-  const rawWatchedItems = useWatch({ control, name: "items" }) || [];
-  const watchedItems = useDebouncedValue(rawWatchedItems, 120);
+  // Live watch for nested items (useWatch for stable array subscription)
+  const watchedItems = useWatch({ control, name: "items" }) || [];
 
   // Use shared calculation utility - calculateLineAmount imported from utils/calculations
 
-  // Sync item amounts when items change - guarded to prevent unnecessary setValue
+  // Sync item amounts when items change
   useEffect(() => {
     watchedItems.forEach((item, index) => {
       const calculatedAmount = calculateLineAmount(item);
-      const currentAmount = getValues(`items.${index}.amount`);
-      const currentValue = toNumber(currentAmount, 0);
-      if (Math.abs(calculatedAmount - currentValue) > 0.01) {
+      const currentAmount = toNumber(item?.amount, 0);
+      if (Math.abs(calculatedAmount - currentAmount) > 0.01) {
         setValue(`items.${index}.amount`, calculatedAmount, { shouldDirty: false, shouldValidate: false });
       }
     });
-  }, [watchedItems, setValue, getValues]);
+  }, [watchedItems, setValue]);
 
   // Subtotal = sum of line amounts using shared utility
   const subTotal = useMemo(() => {
@@ -167,24 +159,12 @@ const NewDeliveryChallan = () => {
     return calculateGrandTotal(subTotal, taxAmount, adjustment);
   }, [subTotal, taxAmount, adjustment]);
 
-  // Sync calculated values to form state - guarded to prevent unnecessary setValue
+  // Sync calculated values to form state
   useEffect(() => {
-    const currentSubTotal = getValues("subTotal");
-    const currentTax = getValues("taxAmount");
-    const currentTotal = getValues("totalAmount");
-    
-    const nearlyEqual = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
-    
-    if (!nearlyEqual(currentSubTotal, subTotal)) {
-      setValue("subTotal", subTotal, { shouldDirty: false });
-    }
-    if (!nearlyEqual(currentTax, Math.abs(taxAmount))) {
-      setValue("taxAmount", Math.abs(taxAmount), { shouldDirty: false });
-    }
-    if (!nearlyEqual(currentTotal, finalTotal)) {
-      setValue("totalAmount", finalTotal, { shouldDirty: false });
-    }
-  }, [subTotal, taxAmount, finalTotal, setValue, getValues]);
+    setValue("subTotal", subTotal, { shouldDirty: false });
+    setValue("taxAmount", Math.abs(taxAmount), { shouldDirty: false });
+    setValue("totalAmount", finalTotal, { shouldDirty: false });
+  }, [subTotal, taxAmount, finalTotal, setValue]);
 
   // File upload
   const handleFileUpload = (e) => {
@@ -212,7 +192,7 @@ const NewDeliveryChallan = () => {
     mutationFn: createDeliveryChallan,
     onSuccess: () => {
       queryClient.invalidateQueries(["deliveryChallans"]);
-      alert("Delivery Challan Created!");
+      notifySuccess("Delivery Challan Created!");
       reset(DEFAULTS);
       navigate("/deliverychallans");
     },
@@ -223,7 +203,7 @@ const NewDeliveryChallan = () => {
     mutationFn: ({ id, payload }) => updateDeliveryChallan(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["deliveryChallans"]);
-      alert("Delivery Challan Updated!");
+      notifySuccess("Delivery Challan Updated!");
       navigate("/deliverychallans");
     },
     onError: (err) => handleProvisionalError(err, "Update Delivery Challan"),

@@ -9,6 +9,7 @@ import { getItemSummary } from "../reportAPI";
 import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const StockSummary = () => {
     const [showPreview, setShowPreview] = useState(false);
@@ -85,7 +86,7 @@ const StockSummary = () => {
     ];
     const downloadExcel = () => {
         if (filteredData.length === 0) {
-            alert("No data available to export!");
+            notifyInfo("No data available to export!");
             return;
         }
         const excelData = filteredData.map((r) => ({
@@ -168,7 +169,7 @@ const StockSummary = () => {
             setPdfUrl(url);
             setShowPreview(true);
         } catch (error) {
-            alert("Error generating PDF");
+            notifyError("Error generating PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);

@@ -9,6 +9,8 @@ import { mapFormToApi, mapApiToForm } from "./mapper";
 import { handleProvisionalError } from "../../utils/handleProvisionalError";
 import { MOBILE_REQUIRED, onlyDigits } from "../../utils/validation";
 
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
+
 const DEFAULTS = {
     userName: "",
     email: "",
@@ -26,6 +28,9 @@ const DEFAULTS = {
 };
 
 const AddUserComp = ({ editData, setEditData }) => {
+    const isEditing = Boolean(editData?.id || editData?._id);
+    
+    
     const { control, handleSubmit, reset, formState: { errors } } = useForm({ defaultValues: DEFAULTS });
     const queryClient = useQueryClient();
     const navigate = useNavigate();
@@ -56,7 +61,7 @@ const AddUserComp = ({ editData, setEditData }) => {
         mutationFn: createUser,
         onSuccess: () => {
             queryClient.invalidateQueries(["users"]);
-            alert("User Created!");
+            notifySuccess("User Created!");
             // close modal then reset and navigate
             closeAddUserModal();
             reset(DEFAULTS);
@@ -70,7 +75,7 @@ const AddUserComp = ({ editData, setEditData }) => {
         mutationFn: ({ id, payload }) => updateUser(id, payload),
         onSuccess: () => {
             queryClient.invalidateQueries(["users"]);
-            alert("User Updated!");
+            notifySuccess("User Updated!");
             // close modal then reset/edit state and navigate
             closeAddUserModal();
             setEditData?.(null);

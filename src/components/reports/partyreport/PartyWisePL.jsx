@@ -1,53 +1,104 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useMemo } from "react";
+import { useForm, Controller, useWatch } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import DataTable from "react-data-table-component";
 import * as XLSX from "xlsx";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
+import { getPartyProfitLoss } from "../reportAPI";
+import { extractItems } from "../../../utils/extractItems";
+import { extractPagination } from "../../../utils/extractPagination";
+import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 
 
 const PartyWisePL = () => {
-    // Mock data (same as your original)
-    const mockData = [
-        { id: 1, partyName: "ABC Traders", phone: "9876543210", totalSale: 15000, profit: 2000 },
-        { id: 2, partyName: "XYZ Suppliers", phone: "9123456780", totalSale: 25000, profit: -1000 },
-        { id: 3, partyName: "LMN Distributors", phone: "9812345670", totalSale: 35000, profit: 3500 },
-        { id: 4, partyName: "Omkar Enterprises", phone: "9001234567", totalSale: 12000, profit: 800 },
-        { id: 5, partyName: "SRS Agencies", phone: "9823456789", totalSale: 41000, profit: 6000 },
-        { id: 6, partyName: "Vision Traders", phone: "9908765432", totalSale: 19000, profit: -500 },
-        { id: 7, partyName: "Elite Distributors", phone: "9834567123", totalSale: 28000, profit: 1200 },
-        { id: 8, partyName: "Perfect Supplies", phone: "9789056123", totalSale: 54000, profit: 8500 },
-        { id: 9, partyName: "Bright Sales Corp", phone: "9956782345", totalSale: 23000, profit: 2500 },
-        { id: 10, partyName: "Global Wholesalers", phone: "9876512340", totalSale: 32000, profit: 4500 },
-        { id: 11, partyName: "Metro Agencies", phone: "9812323456", totalSale: 27000, profit: -1500 },
-        { id: 12, partyName: "Everest Traders", phone: "9911223344", totalSale: 15000, profit: 1800 },
-        { id: 13, partyName: "Future Link", phone: "9798456123", totalSale: 47000, profit: 5300 },
-        { id: 14, partyName: "Sunrise Enterprises", phone: "9898989898", totalSale: 21000, profit: -700 },
-        { id: 15, partyName: "Royal Mart", phone: "9807070707", totalSale: 56000, profit: 9600 },
-    ];
+    // Report filter form - always unlock on mount
+    
 
-    const [data, setData] = useState(mockData);
-    const [search, setSearch] = useState("");
+    const today = new Date();
+    const defaultToDate = today.toISOString().slice(0, 10);
+    const defaultFromDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+
+    const { control } = useForm({
+        defaultValues: {
+            fromDate: defaultFromDate,
+            toDate: defaultToDate,
+            party: "All Parties",
+            searchText: "",
+        },
+    });
+
+    const fromDate = useWatch({ control, name: "fromDate" });
+    const toDate = useWatch({ control, name: "toDate" });
+    const party = useWatch({ control, name: "party" });
+    const searchText = useWatch({ control, name: "searchText" });
+
+    const [page, setPage] = useState(1);
+    const [perPage, setPerPage] = useState(15);
     const [pdfUrl, setPdfUrl] = useState(null);
     const [showPreview, setShowPreview] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const tempContainer = useRef(null);
 
-    // Filter logic (unchanged)
-    const filteredData = data.filter((item) =>
-        item.partyName.toLowerCase().includes(search.toLowerCase())
+    const requestParams = useMemo(() => {
+        const params = { Page: page, PageSize: perPage };
+        if (fromDate) params.FromDate = fromDate;
+        if (toDate) params.ToDate = toDate;
+        if (party && party !== "All Parties") params.PartyName = party;
+        return params;
+    }, [fromDate, toDate, party, page, perPage]);
+
+    const queryKey = useMemo(
+        () => ["report-party-profit-loss", fromDate, toDate, party, page, perPage],
+        [fromDate, toDate, party, page, perPage]
     );
 
-    // Totals
-    const totalSale = filteredData.reduce((sum, row) => sum + row.totalSale, 0);
-    const totalProfit = filteredData.reduce((sum, row) => sum + row.profit, 0);
+    const { data: fetched, isLoading } = useQuery({
+        queryKey,
+        queryFn: () => getPartyProfitLoss(requestParams),
+        enabled: Boolean(fromDate && toDate),
+        keepPreviousData: true,
+        retry: 1,
+        onError: (error) => handleProvisionalError(error, "Party Wise Profit Loss"),
+    });
+
+    const apiRows = extractItems(fetched);
+    const pagination = extractPagination(fetched);
+    const tableRows = apiRows;
+    const totalRows = Number.isFinite(pagination.totalCount) ? pagination.totalCount : tableRows.length;
+
+    const filteredData = useMemo(() => {
+        const text = (searchText ?? "").toLowerCase();
+        if (!text) return tableRows;
+        return tableRows.filter((row) =>
+            (row.partyName ?? "").toLowerCase().includes(text)
+        );
+    }, [searchText, tableRows]);
+
+    const totalSale = useMemo(
+        () => filteredData.reduce((sum, row) => sum + Number(row.totalSale ?? row.saleAmount ?? 0), 0),
+        [filteredData]
+    );
+    const totalProfit = useMemo(
+        () => filteredData.reduce((sum, row) => sum + Number(row.profit ?? row.profitLoss ?? 0), 0),
+        [filteredData]
+    );
+
+    const formatCurrency = (value) => `₹ ${Number(value ?? 0).toLocaleString()}`;
+
+    const handlePageChange = (newPage) => setPage(newPage);
+    const handlePerRowsChange = (newPerPage) => {
+        setPerPage(newPerPage);
+        setPage(1);
+    };
 
     // 📊 Excel Report Download
     const exportToExcel = () => {
         const worksheet = XLSX.utils.json_to_sheet(filteredData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "PartyWise Profit-Loss");
-        XLSX.writeFile(workbook, `PartyWisePL_${new Date().toISOString().slice(0, 10)}.xlsx`);
+        XLSX.writeFile(workbook, `PartyWisePL_${fromDate}_${toDate}.xlsx`);
     };
 
     // 🧾 PDF Generate Logic
@@ -81,21 +132,21 @@ const PartyWisePL = () => {
           </thead>
           <tbody>
             ${filteredData
-                    .map(
-                        (r, i) => `
+                .map(
+                    (r, i) => `
               <tr>
                 <td>${i + 1}</td>
-                <td class="text-start">${r.partyName}</td>
-                <td>${r.phone}</td>
-                <td>${r.totalSale.toLocaleString()}</td>
-                <td style="color:${r.profit >= 0 ? "green" : "red"}">${r.profit.toLocaleString()}</td>
+                <td class="text-start">${r.partyName ?? ""}</td>
+                <td>${r.phone ?? ""}</td>
+                <td>${formatCurrency(r.totalSale ?? r.saleAmount)}</td>
+                <td style="color:${Number(r.profit ?? r.profitLoss ?? 0) >= 0 ? "green" : "red"}">${formatCurrency(r.profit ?? r.profitLoss)}</td>
               </tr>`
-                    )
-                    .join("")}
+                )
+                .join("")}
             <tr class="fw-bold">
               <td colspan="3" class="text-start">Total</td>
-              <td>${totalSale.toLocaleString()}</td>
-              <td style="color:${totalProfit >= 0 ? "green" : "red"}">${totalProfit.toLocaleString()}</td>
+              <td>${formatCurrency(totalSale)}</td>
+              <td style="color:${totalProfit >= 0 ? "green" : "red"}">${formatCurrency(totalProfit)}</td>
             </tr>
           </tbody>
         </table>
@@ -128,27 +179,27 @@ const PartyWisePL = () => {
         if (action === "save") {
             const link = document.createElement("a");
             link.href = pdfUrl;
-            link.download = `PartyWisePL_${new Date().toISOString().slice(0, 10)}.pdf`;
+            link.download = `PartyWisePL_${fromDate}_${toDate}.pdf`;
             link.click();
         }
     };
 
-    // Columns (same)
+    // Columns
     const columns = [
-        { name: "#", selector: (row) => row.id, width: "70px" },
-        { name: "PARTY NAME", selector: (row) => row.partyName, sortable: true },
-        { name: "PHONE NO.", selector: (row) => row.phone, sortable: true },
+        { name: "#", selector: (_, index) => index + 1, width: "70px" },
+        { name: "PARTY NAME", selector: (row) => row.partyName ?? "", sortable: true },
+        { name: "PHONE NO.", selector: (row) => row.phone ?? "", sortable: true },
         {
             name: "TOTAL SALE AMOUNT",
-            selector: (row) => `₹ ${row.totalSale.toLocaleString()}`,
+            selector: (row) => formatCurrency(row.totalSale ?? row.saleAmount),
             sortable: true,
             right: true,
         },
         {
             name: "PROFIT (+) / LOSS (-)",
             cell: (row) => (
-                <span style={{ color: row.profit >= 0 ? "green" : "red" }}>
-                    ₹ {row.profit.toLocaleString()}
+                <span style={{ color: Number(row.profit ?? row.profitLoss ?? 0) >= 0 ? "green" : "red" }}>
+                    {formatCurrency(row.profit ?? row.profitLoss)}
                 </span>
             ),
             sortable: true,
@@ -169,24 +220,40 @@ const PartyWisePL = () => {
             className="container-fluid bg-light py-4 overflow-auto rounded-3"
             style={{ height: "calc(100vh - 11vh)" }}
         >
-            {/* Header & Filters (unchanged layout) */}
+            {/* Header & Filters */}
             <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-3">
                 <div className="d-flex align-items-center gap-2 flex-wrap">
                     <h5 className="mb-0 fw-bold">This Month</h5>
                     <div className="d-flex align-items-center border rounded px-2 py-1 bg-light">
                         <span className="me-2 text-secondary fw-semibold">Between</span>
-                        <input type="date" className="form-control form-control-sm" defaultValue="2025-11-01" />
+                        <Controller
+                            name="fromDate"
+                            control={control}
+                            render={({ field }) => (
+                                <input type="date" {...field} className="form-control form-control-sm" />
+                            )}
+                        />
                         <span className="mx-2">To</span>
-                        <input type="date" className="form-control form-control-sm" defaultValue="2025-11-30" />
+                        <Controller
+                            name="toDate"
+                            control={control}
+                            render={({ field }) => (
+                                <input type="date" {...field} className="form-control form-control-sm" />
+                            )}
+                        />
                     </div>
                 </div>
 
                 <div className="d-flex align-items-center gap-2 flex-wrap">
-                    <select className="form-select form-select-sm" style={{ width: "150px" }}>
-                        <option>All Parties</option>
-                        <option>ABC Traders</option>
-                        <option>XYZ Suppliers</option>
-                    </select>
+                    <Controller
+                        name="party"
+                        control={control}
+                        render={({ field }) => (
+                            <select {...field} className="form-select form-select-sm" style={{ width: "150px" }}>
+                                <option>All Parties</option>
+                            </select>
+                        )}
+                    />
 
                     <button className="btn btn-outline-secondary btn-sm" onClick={exportToExcel}>
                         <i className="bi bi-file-earmark-excel"></i> Excel Report
@@ -204,13 +271,18 @@ const PartyWisePL = () => {
 
             {/* Search */}
             <div className="mb-2">
-                <input
-                    type="text"
-                    className="form-control form-control-sm"
-                    placeholder="Search by Party Name..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    style={{ maxWidth: "250px" }}
+                <Controller
+                    name="searchText"
+                    control={control}
+                    render={({ field }) => (
+                        <input
+                            {...field}
+                            type="text"
+                            className="form-control form-control-sm"
+                            placeholder="Search by Party Name..."
+                            style={{ maxWidth: "250px" }}
+                        />
+                    )}
                 />
             </div>
 
@@ -223,33 +295,35 @@ const PartyWisePL = () => {
                     columns={columns}
                     data={filteredData}
                     pagination
-                    paginationPerPage={15}
+                    paginationServer
+                    paginationTotalRows={totalRows}
+                    paginationPerPage={perPage}
+                    paginationDefaultPage={page}
+                    paginationRowsPerPageOptions={[15, 25, 50, 100]}
+                    onChangePage={handlePageChange}
+                    onChangeRowsPerPage={handlePerRowsChange}
                     highlightOnHover
                     responsive
+                    progressPending={isLoading}
                     noDataComponent={
                         <div className="text-center p-4 text-muted">
-                            <img
-                                src="https://cdn-icons-png.flaticon.com/512/7486/7486745.png"
-                                alt="no data"
-                                width="80"
-                                className="mb-2"
-                            />
                             <p className="mb-0">No data is available for Party Wise Profit & Loss.</p>
                             <small>Please try again after making relevant changes.</small>
                         </div>
                     }
+                    persistTableHead
                 />
             </div>
 
             {/* Footer Totals */}
             <div className="d-flex justify-content-between align-items-center mt-2 flex-wrap mb-2">
                 <p className="mb-0 fw-semibold">
-                    Total Sale Amount: ₹ {totalSale.toLocaleString()}
+                    Total Sale Amount: {formatCurrency(totalSale)}
                 </p>
                 <p className="mb-0 fw-semibold">
                     Total Profit(+) / Loss(-):{" "}
                     <span style={{ color: totalProfit >= 0 ? "green" : "red" }}>
-                        ₹ {totalProfit.toLocaleString()}
+                        {formatCurrency(totalProfit)}
                     </span>
                 </p>
             </div>

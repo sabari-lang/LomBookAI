@@ -11,7 +11,11 @@ import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+
 const DiscountReport = () => {
+    // Report filter form - always unlock on mount
+    
     const form = useForm({
         defaultValues: {
             fromDate: "2025-11-01",
@@ -164,7 +168,7 @@ const DiscountReport = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to generate PDF");
+            notifyError("Failed to generate PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);

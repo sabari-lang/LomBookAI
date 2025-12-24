@@ -38,7 +38,7 @@ const AccountingCustomerDetailSeaIn = () => {
 
         return items.map((item) => ({
             voucherDate: entry.voucherDate ?? "",
-            hawbNo: entry.hawbNo ?? entry.hblNo ?? "",
+            hawbNo: entry.hblNo ?? entry.hawbNo ?? "",
             description: item.description ?? "",
             sac: item.sac ?? "",
             currency: item.currency ?? "",

@@ -6,7 +6,10 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
 
+
 const ItemDetails = () => {
+  // Report filter form - always unlock on mount
+  
   const { control, watch } = useForm({
     defaultValues: {
       fromDate: "2025-11-01",

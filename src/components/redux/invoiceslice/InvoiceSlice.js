@@ -17,7 +17,6 @@ const InvoiceSlice = createSlice({
         },
 
         removeInvoice(state, action) {
-            console.log("action.payload", action.payload, state);
             return state?.filter((t) => t.invoiceNumber !== action.payload);
         },
         // (Optional) replaceAllInvoices — DO NOT call this if you want add-only

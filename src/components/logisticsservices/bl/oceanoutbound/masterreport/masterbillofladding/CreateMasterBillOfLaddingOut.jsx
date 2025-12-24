@@ -6,7 +6,10 @@ import { UNIT_PKG_LIST } from "../../../../../../utils/unitPkgList";
 
 
 
+
 const CreateMasterBillOfLaddingOut = () => {
+    // Create-only form - always unlock on mount
+    
     const storedRaw = sessionStorage.getItem("masterAirwayData");
     const storedData = storedRaw ? JSON.parse(storedRaw) : null;
 

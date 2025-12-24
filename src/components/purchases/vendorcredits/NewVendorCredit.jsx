@@ -8,7 +8,8 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { getItems } from "../../items/api";
 import { extractItems } from "../../../utils/extractItems";
 import { calculateLineAmount, calculateSubtotal, calculateDiscountAmount, calculateTaxAmount, calculateGrandTotal, toNumber, parseTaxPercentage } from "../../../utils/calculations";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const DEFAULTS = {
   vendorName: "",
@@ -48,9 +49,6 @@ const NewVendorCredit = () => {
   const isNewFromSource = state?.isNew === true;
   const isEditing = Boolean(editId) && !isNewFromSource;
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
-
   const {
     control,
     handleSubmit,
@@ -78,6 +76,8 @@ const NewVendorCredit = () => {
         setUploadedFiles(state.attachments);
         setValue("attachments", state.attachments);
       }
+      // Call refreshKeyboard after form values are populated
+      refreshKeyboard();
       return;
     }
 
@@ -113,7 +113,7 @@ const NewVendorCredit = () => {
     mutationFn: (payload) => createVendorCredit(payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["vendorCredits"]);
-      alert("Vendor credit created successfully");
+      notifySuccess("Vendor credit created successfully");
       reset(DEFAULTS);
       setUploadedFiles([]);
       setValue("attachments", []);
@@ -126,7 +126,7 @@ const NewVendorCredit = () => {
     mutationFn: ({ id, payload }) => updateVendorCredit(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["vendorCredits"]);
-      alert("Vendor credit updated successfully");
+      notifySuccess("Vendor credit updated successfully");
       navigate("/vendorcredits");
     },
     onError: (error) => handleProvisionalError(error, "Update Vendor Credit"),

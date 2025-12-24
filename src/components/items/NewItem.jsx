@@ -7,7 +7,8 @@ import { createItem, updateItem } from "./api";
 import { getVendors } from "../purchases/api";
 import { extractItems } from "../../utils/extractItems";
 import { handleProvisionalError } from "../../utils/handleProvisionalError";
-import { useUnlockInputs } from "../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
 
 const labelBase = { fontWeight: 600, fontSize: "13px" };
 const reqColor = "#d9534f";
@@ -183,8 +184,6 @@ const NewItem = () => {
         }
     }, []);
 
-    // ✅ Keyboard unlock hook for edit mode
-    useUnlockInputs(isEditing);
 
     const {
         control,
@@ -232,6 +231,8 @@ const NewItem = () => {
             setTaxPreference(taxPrefFromSource);
             setIntraStateTaxRate(intraTaxValue);
             setInterStateTaxRate(interTaxValue);
+            // Call refreshKeyboard after form values are populated
+            refreshKeyboard();
     }, [editId]);
 
     const sellable = useWatch({ control, name: "sellable" });
@@ -288,7 +289,7 @@ const NewItem = () => {
         mutationFn: createItem,
         onSuccess: () => {
             queryClient.invalidateQueries(["items"]);
-            alert("Item created successfully");
+            notifySuccess("Item created successfully");
             reset(initialValues);
             navigate("/items");
         },
@@ -300,7 +301,7 @@ const NewItem = () => {
         onSuccess: () => {
             queryClient.invalidateQueries(["items"]);
             if (editId) queryClient.invalidateQueries(["items", editId]);
-            alert("Item updated successfully");
+            notifySuccess("Item updated successfully");
             reset(initialValues);
             navigate("/items");
         },

@@ -7,13 +7,15 @@ import {
 } from "react-hook-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import moment from "moment";
-import { useNavigate } from "react-router-dom";
 import { FaSearch } from "react-icons/fa";
 import NewWindow from "react-new-window";
 import VendorSearch from "../../../../../../common/popup/VendorSearch";
 
 import { createAirOutboundVendorAccount, updateAirOutboundVendorAccount } from "../../../airOutboundApi";
 import { handleProvisionalError } from "../../../../../../../utils/handleProvisionalError";
+import { refreshKeyboard } from "../../../../../../../utils/refreshKeyboard";
+import { useAppBack } from "../../../../../../../hooks/useAppBack";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
 
 // --------------------------
 // Safe helpers (same as previous)
@@ -56,7 +58,9 @@ const sampleRow = () => ({
 });
 
 const RaisingEntryVendorOut = ({ editData, setEditData }) => {
-    const navigate = useNavigate();
+    const isEditing = Boolean(editData?.id || editData?._id);
+    
+    const { goBack } = useAppBack();
     const queryClient = useQueryClient();
     const [open, setOpen] = useState(false);
     const [searchTarget, setSearchTarget] = useState(null);
@@ -73,8 +77,6 @@ const RaisingEntryVendorOut = ({ editData, setEditData }) => {
         safeStr(storedHouse?.hawbNo) ||
         safeStr(storedHouse?.houseNumber);
     const mawbNo = safeStr(storedHouse?.mawb);
-
-    const isEditing = Boolean(editData?.id || editData?._id);
 
     // --------------------------
     // Default Values
@@ -115,7 +117,7 @@ const RaisingEntryVendorOut = ({ editData, setEditData }) => {
         control,
         name: "items"
     });
-
+    
     // --------------------------
     // Auto calculation watch inputs
     // --------------------------
@@ -246,6 +248,8 @@ const RaisingEntryVendorOut = ({ editData, setEditData }) => {
 
             items: safeItems
         });
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
     }, [isEditing]);
 
     // --------------------------
@@ -273,7 +277,7 @@ const RaisingEntryVendorOut = ({ editData, setEditData }) => {
 
         onSuccess: () => {
             queryClient.invalidateQueries(["airOutboundVendor"]);
-            alert("Vendor Accounting Entry Created Successfully");
+            notifySuccess("Vendor Accounting Entry Created Successfully");
 
             // RESET FORM
             reset(defaultValues);
@@ -306,7 +310,7 @@ const RaisingEntryVendorOut = ({ editData, setEditData }) => {
             }
 
             // NAVIGATE BACK
-            navigate(-1);
+            goBack();
         }
     });
 
@@ -322,7 +326,7 @@ const RaisingEntryVendorOut = ({ editData, setEditData }) => {
 
         onSuccess: () => {
             queryClient.invalidateQueries(["airOutboundVendor"]);
-            alert("Vendor Accounting Entry Updated Successfully");
+            notifySuccess("Vendor Accounting Entry Updated Successfully");
 
             reset(defaultValues);
             setEditData(null);
@@ -353,7 +357,7 @@ const RaisingEntryVendorOut = ({ editData, setEditData }) => {
                 }
             }
 
-            navigate(-1);
+            goBack();
         }
     });
 

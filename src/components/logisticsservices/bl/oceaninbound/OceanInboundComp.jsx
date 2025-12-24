@@ -8,6 +8,7 @@ import JobCreationSeaInbound from "./JobCreationSeaInbound";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Pagination from "../../../common/pagination/Pagination";
 import { extractItems } from "../../../../utils/extractItems";
+import { confirm } from "../../../../utils/confirm";
 import {
     deleteOceanInboundJob,
     getOceanInboundJobs,
@@ -32,10 +33,11 @@ const OceanInboundComp = () => {
         onSettled: () => setDeletingJobKey(null),
     });
 
-    const handleDelete = (row = {}) => {
+    const handleDelete = async (row = {}) => {
         const jobNo = row.jobNo;
         if (!jobNo) return;
-        if (!window.confirm(`Delete Ocean Inbound job ${jobNo}?`)) return;
+        const confirmed = await confirm(`Delete Ocean Inbound job ${jobNo}?`);
+    if (!confirmed) return;
         setDeletingJobKey(jobNo);
         deleteMutation.mutate(jobNo);
     };
@@ -82,24 +84,6 @@ const OceanInboundComp = () => {
         if (page < 1 || page > totalPages) return;
         setCurrentPage(page);
     };
-
-    // Check if modal should be opened from InvoiceAgent
-    useEffect(() => {
-        const shouldOpen = sessionStorage.getItem("openJobCreationModal");
-        if (shouldOpen === "ocean-inbound") {
-            const modalEl = document.getElementById("seainCreateJobModal");
-            if (modalEl) {
-                const bs = window.bootstrap;
-                if (bs?.Modal) {
-                    const modal = bs.Modal.getInstance(modalEl) || new bs.Modal(modalEl);
-                    modal.show();
-                } else if (window.$) {
-                    window.$(modalEl).modal("show");
-                }
-            }
-            sessionStorage.removeItem("openJobCreationModal");
-        }
-    }, []);
 
     return (
         <>

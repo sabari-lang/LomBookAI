@@ -5,6 +5,8 @@ import AddUserComp from "./AddUserComp";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { getUsers, deleteUser } from "./api";
 import { handleProvisionalError } from "../../utils/handleProvisionalError";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
+import { confirm } from "../../utils/confirm";
 
 const UserManagement = () => {
     const [entriesPerPage, setEntriesPerPage] = useState(10);
@@ -22,13 +24,14 @@ const UserManagement = () => {
         mutationFn: deleteUser,
         onSuccess: () => {
             queryClient.invalidateQueries(["users"]);
-            alert("User Deleted!");
+            notifySuccess("User Deleted!");
         },
         onError: (err) => handleProvisionalError(err, "Delete User"),
     });
 
-    const onDelete = (id) => {
-        if (!window.confirm("Delete this user?")) return;
+    const onDelete = async (id) => {
+        const confirmed = await confirm("Delete this user?");
+    if (!confirmed) return;
         deleteMutation.mutate(id);
     };
 
@@ -119,7 +122,7 @@ const UserManagement = () => {
                     <div
                         className="table-responsive"
                         style={{
-                            maxHeight: "60vh",
+                            minHeight: "55vh",
                             overflowY: "auto",
                             overflowX: "auto",
                             position: "relative",

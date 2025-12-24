@@ -1,25 +1,33 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { Search, Trash } from "react-bootstrap-icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createOceanInboundHouse, updateOceanInboundHouse } from "../../oceanInboundApi";
 import { CONTAINER_SIZE_LIST, UNIT_PKG_LIST } from "../../../../../../utils/unitPkgList";
 import NewWindow from "react-new-window";
 import CustomerSearch from "../../../../../common/popup/CustomerSearch";
-import { useUnlockInputs } from "../../../../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../../../../utils/refreshKeyboard";
+import { SHIPMENT_CATEGORY } from "../../../../../../constants/shipment";
+import { DEFAULT_CONSIGNEE } from "../../../../../../utils/defaultPartyInfo";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../utils/notifications";
+import { createOceanInboundHouse, updateOceanInboundHouse } from "../../oceanInboundApi";
 
 
 const CreateHouseSeaInbound = ({ editData, setEditData }) => {
 
+
+
+
   const storedRaw = sessionStorage.getItem("masterAirwayData");
+
   const storedData = storedRaw ? JSON.parse(storedRaw) : null;
 
   const jobNo = storedData?.jobNo;  // ⭐ CORRECT PLACE
-  console.log("ed", editData)
+  console.log("ed", storedData)
 
   // Customer Search State
   const [open, setOpen] = useState(false);
   const [searchTarget, setSearchTarget] = useState(null);
+  const lastAutoFillRef = useRef({ pkg: "", wgt: "" });
 
   // Helper function to format date for input[type="date"]
   const formatDateForInput = (dateValue) => {
@@ -52,9 +60,10 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
     consigneeAddress: storedData?.consigneeAddress ?? "",
     notifyName: storedData?.notifyName ?? "",
     notifyAddress: storedData?.notifyAddress ?? "",
+    agentAddress: storedData?.agentAddress ?? "",
     // dates & terms - Auto-filled from job/master
-    onBoardDate: formatDateForInput(storedData?.onBoardDate),
-    arrivalDate: formatDateForInput(storedData?.arrivalDate),
+    onBoardDate: formatDateForInput(storedData?.onBoardDate) || null,
+    arrivalDate: formatDateForInput(storedData?.arrivalDate) || null,
     precarriageBy: storedData?.precarriageBy ?? "N.A",
     portDischarge: storedData?.portDischarge ?? "",
     freightTerm: storedData?.freightTerm ?? "",
@@ -72,11 +81,11 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
     voy: storedData?.voy ?? "",
     callSign: storedData?.callSign ?? "",
     // package/weight/measurement - Auto-filled from job/master
-    package: storedData?.package ?? "",
+    package: storedData?.package ?? null,
     unitPkg: storedData?.unitPkg ?? "BALES",
-    grossWeight: storedData?.grossWeight ?? "",
+    grossWeight: storedData?.grossWeight ?? null,
     unitWeight: storedData?.unitWeight ?? "Kgs",
-    measurement: storedData?.measurement ?? "",
+    measurement: storedData?.measurement ?? null,
     unitCbm: storedData?.unitCbm ?? "CBM",
     // containers dynamic - Auto-filled from job/master containers array
     containers: Array.isArray(storedData?.containers) && storedData.containers.length > 0
@@ -84,16 +93,16 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
         containerNo: cont?.containerNo ?? "",
         size: cont?.size ?? "20 HC",
         term: cont?.term ?? "CFS/CFS",
-        wgt: cont?.wgt ?? "",
-        pkg: cont?.pkg ?? "",
+        wgt: cont?.wgt ?? null,
+        pkg: cont?.pkg ?? null,
         sealNo: cont?.sealNo ?? "",
       }))
       : [{
         containerNo: "",
         size: "20 HC",
         term: "CFS/CFS",
-        wgt: "",
-        pkg: "",
+        wgt: null,
+        pkg: null,
         sealNo: "",
       }],
     // last section - Auto-filled from job/master
@@ -101,13 +110,14 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
     descShort: storedData?.descShort ?? '"SAID TO CONTAIN"',
     descLong: storedData?.descLong ?? "",
     freightPayable: storedData?.freightPayable ?? "",
-    originalBL: storedData?.originalBL ?? "",
+    originalBL: storedData?.originalBL ?? null,
     place: storedData?.place ?? "",
-    dateOfIssue: formatDateForInput(storedData?.dateOfIssue),
+    dateOfIssue: formatDateForInput(storedData?.dateOfIssue) || null,
     // additional HBL-specific fields requested
     shipperInvoiceNo: "",
-    shipperInvoiceDate: "",
-    shipperInvoiceAmount: "",
+    shipperInvoiceDate: null,
+    shipperInvoiceAmount: null,
+    notes: storedData?.notes ?? "",
   }
 
   const {
@@ -125,9 +135,9 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
   const isEditing = Boolean(editData?.id);
   const queryClient = useQueryClient();
 
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
-
+  const shippingTerm = watch("shippingTerm");
+  const hideSize = shippingTerm === "LCL/LCL";
+  
   // ⭐ Auto-fill from sessionStorage on mount (only when NOT editing)
   useEffect(() => {
     // If editing, skip auto-fill (editData will populate the form)
@@ -152,9 +162,54 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
       ...initialValues, // BASE DEFAULTS
       ...editData,        // OVERRIDE WITH API DATA
     });
+    // Call refreshKeyboard after form values are populated
+    refreshKeyboard();
   }, [editData?.id]);
 
   const { fields, append, remove } = useFieldArray({ control, name: "containers" });
+
+  // Auto-fill Package and Gross Weight into first container row
+  const packageValue = watch("package");
+  const grossWeightValue = watch("grossWeight");
+  useEffect(() => {
+    const containers = getValues("containers");
+    if (!containers || containers.length === 0) {
+      // Initialize containers array if empty
+      setValue("containers", [{ containerNo: "", size: "20 HC", term: "CFS/CFS", wgt: "", pkg: "", sealNo: "" }]);
+      return;
+    }
+
+    const firstContainer = containers[0];
+    if (!firstContainer) return;
+
+    // Get current container values (handle null/undefined)
+    const currentPkg = firstContainer.pkg ?? "";
+    const currentWgt = firstContainer.wgt ?? "";
+    
+    // Convert package/grossWeight to strings for comparison
+    const packageStr = packageValue != null ? String(packageValue) : "";
+    const weightStr = grossWeightValue != null ? String(grossWeightValue) : "";
+
+    // Auto-fill package if container is empty or matches last auto-filled value
+    if (packageStr && (currentPkg === "" || currentPkg === lastAutoFillRef.current.pkg)) {
+      setValue("containers.0.pkg", packageStr);
+      lastAutoFillRef.current.pkg = packageStr;
+    } else if (!packageStr && currentPkg === lastAutoFillRef.current.pkg) {
+      // Clear if source is cleared and it matches last auto-fill
+      setValue("containers.0.pkg", "");
+      lastAutoFillRef.current.pkg = "";
+    }
+
+    // Auto-fill weight if container is empty or matches last auto-filled value
+    if (weightStr && (currentWgt === "" || currentWgt === lastAutoFillRef.current.wgt)) {
+      setValue("containers.0.wgt", weightStr);
+      lastAutoFillRef.current.wgt = weightStr;
+    } else if (!weightStr && currentWgt === lastAutoFillRef.current.wgt) {
+      // Clear if source is cleared and it matches last auto-fill
+      setValue("containers.0.wgt", "");
+      lastAutoFillRef.current.wgt = "";
+    }
+  }, [packageValue, grossWeightValue, setValue, getValues]);
 
   // copy consignee -> notify
   const handleSameAsConsignee = (checked) => {
@@ -198,6 +253,59 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
     }
   };
 
+  // Auto-fill consignee when consol === 'Consol' (Inbound)
+  const consolValue = watch("consol");
+  useEffect(() => {
+    // Skip consol-based auto-fill when editing - preserve existing data
+    if (isEditing) return;
+
+    const isConsol = consolValue === "Consol" || consolValue === "CONSOL";
+    
+    if (isConsol) {
+      // Only auto-fill if fields are empty (don't overwrite user input)
+      const currentName = watch("consigneeName");
+      const currentAddress = watch("consigneeAddress");
+      
+      if (!currentName && !currentAddress) {
+        setValue("consigneeName", DEFAULT_CONSIGNEE.consigneeName);
+        setValue("consigneeAddress", DEFAULT_CONSIGNEE.consigneeAddress);
+      }
+    } else {
+      // When Single is selected, clear defaults (only if they match default values)
+      const currentName = watch("consigneeName");
+      const currentAddress = watch("consigneeAddress");
+      
+      if (currentName === DEFAULT_CONSIGNEE.consigneeName && 
+          currentAddress === DEFAULT_CONSIGNEE.consigneeAddress) {
+        setValue("consigneeName", "");
+        setValue("consigneeAddress", "");
+      }
+    }
+  }, [consolValue, setValue, isEditing]);
+
+  // Auto-update when shipment changes
+  const shipment = watch("shipment");
+
+  useEffect(() => {
+    if (!shipment) {
+      setValue("freightTerm", "");
+      return;
+    }
+
+    const isPrepaid = SHIPMENT_CATEGORY.PREPAID.includes(shipment);
+    const isCollect = SHIPMENT_CATEGORY.COLLECT.includes(shipment);
+
+    if (isPrepaid) {
+      setValue("freightTerm", "FREIGHT PREPAID");
+    } else if (isCollect) {
+      setValue("freightTerm", "FREIGHT COLLECT");
+    } else {
+      setValue("freightTerm", "");
+    }
+  }, [shipment, setValue]);
+
+
+
   // POST API - Ocean Inbound
   const createOceanInboundHouseMutation = useMutation({
     mutationFn: ({ jobNo, payload }) =>
@@ -205,7 +313,7 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
 
     onSuccess: () => {
       queryClient.invalidateQueries(["oceanInboundHouseList", jobNo]);
-      alert("Ocean Inbound House Created Successfully");
+      notifySuccess("Ocean Inbound House Created Successfully");
       closeModal();
     },
 
@@ -215,7 +323,7 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
         error?.response?.data?.error ||
         error?.message ||
         "Something went wrong";
-      alert(`Error: ${msg}`);
+      notifyError(`Error: ${msg}`);
     }
   });
 
@@ -225,9 +333,14 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
     mutationFn: ({ jobNo, hblNo, payload }) =>
       updateOceanInboundHouse(jobNo, hblNo, payload),
 
-    onSuccess: () => {
+    onSuccess: (response) => {
       queryClient.invalidateQueries(["oceanInboundHouseList", jobNo]);
-      alert("Ocean Inbound House Updated Successfully");
+      // Store house data after successful update
+      const updatedData = response?.data || response || { ...editData, ...getValues() };
+      if (updatedData) {
+        sessionStorage.setItem("houseAirwayData", JSON.stringify(updatedData));
+      }
+      notifySuccess("Ocean Inbound House Updated Successfully");
       closeModal();
     },
 
@@ -237,7 +350,7 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
         error?.response?.data?.error ||
         error?.message ||
         "Something went wrong";
-      alert(`Error: ${msg}`);
+      notifyError(`Error: ${msg}`);
     }
   });
 
@@ -245,10 +358,26 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
     const data = {
       ...form,
       consol: form?.consol === "Consol",
+
+      // date fields -> null if empty
+      onBoardDate: form.onBoardDate || null,
+      arrivalDate: form.arrivalDate || null,
+      dateOfIssue: form.dateOfIssue || null,
+      shipperInvoiceDate: form.shipperInvoiceDate || null,
+
+      // numeric fields
       package: form.package ? Number(form.package) : null,
       grossWeight: form.grossWeight ? Number(form.grossWeight) : null,
       measurement: form.measurement ? Number(form.measurement) : null,
-      asArranged: form.asArranged ? 1 : 0,
+      originalBL: form.originalBL ? Number(form.originalBL) : null,
+      shipperInvoiceAmount: form.shipperInvoiceAmount ? Number(form.shipperInvoiceAmount) : null,
+
+      // containers numeric fields
+      containers: form.containers.map(c => ({
+        ...c,
+        wgt: c.wgt ? Number(c.wgt) : null,
+        pkg: c.pkg ? Number(c.pkg) : null,
+      })),
     };
 
     if (isEditing) {
@@ -326,7 +455,7 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
                           render={({ field }) => (
                             <select className="form-select" {...field}>
                               <option>House B/L</option>
-                              <option>Master B/L</option>
+
                             </select>
                           )}
                         />
@@ -475,7 +604,7 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
 
                         <div className="col-md-4">
                           <label className="fw-bold">Freight Term</label>
-                          <Controller name="freightTerm" control={control} render={({ field }) => <input className="form-control" {...field} />} />
+                          <Controller name="freightTerm" control={control} render={({ field }) => <input className="form-control" {...field} readOnly />} />
                         </div>
 
                         <div className="col-md-4">
@@ -577,7 +706,7 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
                       <div className="row g-2 align-items-end">
                         <div className="col-md-3">
                           <label className="fw-bold">Package</label>
-                          <Controller name="package" control={control} render={({ field }) => <input className="form-control" {...field} />} />
+                          <Controller name="package" control={control} render={({ field }) => <input className="form-control" {...field} value={field.value ?? ""} />} />
                         </div>
 
                         <div className="col-md-3">
@@ -601,7 +730,7 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
 
                         <div className="col-md-3">
                           <label className="fw-bold">Gross Weight</label>
-                          <Controller name="grossWeight" control={control} render={({ field }) => <input className="form-control" {...field} />} />
+                          <Controller name="grossWeight" control={control} render={({ field }) => <input className="form-control" {...field} value={field.value ?? ""} />} />
                         </div>
 
                         <div className="col-md-3">
@@ -634,7 +763,8 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
                     <thead className="table-light">
                       <tr>
                         <th style={{ width: "20%" }}>Container No</th>
-                        <th style={{ width: "12%" }}>Size</th>
+                        {!hideSize && <th style={{ width: "12%" }}>Size</th>}
+
                         <th style={{ width: "12%" }}>Term</th>
                         <th style={{ width: "10%" }}>Wgt</th>
                         <th style={{ width: "15%" }}>Pkg</th>
@@ -657,22 +787,24 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
                             />
                           </td>
 
-                          {/* Size */}
-                          <td>
-                            <Controller
-                              name={`containers.${i}.size`}
-                              control={control}
-                              render={({ field }) => (
-                                <select className="form-select form-select-sm" {...field}>
-                                  <option value="">--Select--</option>
-                                  {CONTAINER_SIZE_LIST?.map((size) => (
-                                    <option key={size} value={size}>{size}</option>
-                                  ))}
-                                </select>
-                              )}
-                            />
 
-                          </td>
+                          {/* Size — hidden only when shippingTerm = LCL/LCL */}
+                          {!hideSize && (
+                            <td>
+                              <Controller
+                                name={`containers.${i}.size`}
+                                control={control}
+                                render={({ field }) => (
+                                  <select className="form-select form-select-sm" {...field}>
+                                    <option value="">--Select--</option>
+                                    {CONTAINER_SIZE_LIST?.map((size) => (
+                                      <option key={size} value={size}>{size}</option>
+                                    ))}
+                                  </select>
+                                )}
+                              />
+                            </td>
+                          )}
 
                           {/* Term */}
                           <td>
@@ -698,7 +830,7 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
                               name={`containers.${i}.wgt`}
                               control={control}
                               render={({ field }) => (
-                                <input className="form-control form-control-sm" {...field} />
+                                <input className="form-control form-control-sm" {...field} value={field.value ?? ""} />
                               )}
                             />
                           </td>
@@ -709,7 +841,7 @@ const CreateHouseSeaInbound = ({ editData, setEditData }) => {
                               name={`containers.${i}.pkg`}
                               control={control}
                               render={({ field }) => (
-                                <input className="form-control form-control-sm" {...field} />
+                                <input className="form-control form-control-sm" {...field} value={field.value ?? ""} />
                               )}
                             />
                           </td>

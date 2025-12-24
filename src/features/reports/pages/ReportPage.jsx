@@ -1,27 +1,33 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ReportFilters from '../components/ReportFilters';
 import ReportTable from '../components/ReportTable';
 import BulkActionsBar from '../components/BulkActionsBar';
+import ReportPdfExport from '../components/ReportPdfExport';
+import PdfPreviewModal from '../../../components/common/popup/PdfPreviewModal';
 import { getReportById, getReportByPath } from '../config/reportDefinitions';
 import {
   fetchReport,
   bulkUpdateStatus,
   bulkUpdateDate,
-  exportPdf,
   exportCsv,
 } from '../api/reportsApi';
 import { extractItems } from '../../../utils/extractItems';
 import { extractPagination } from '../../../utils/extractPagination';
 import { handleProvisionalError } from '../../../utils/handleProvisionalError';
 
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+
 /**
  * Generic Report Page Component
  * Handles all report logic and state management
  */
 const ReportPage = () => {
+  // Report filter form - always unlock on mount
+
+
   const location = useLocation();
   // Try to get reportId from params, or derive from path
   const reportConfig = getReportByPath(location.pathname) || getReportById(useParams().reportId);
@@ -39,6 +45,12 @@ const ReportPage = () => {
   const [hasResults, setHasResults] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState(null); // Track when filters are applied
   const [hasSearched, setHasSearched] = useState(false); // Track if user has clicked Result
+
+  // PDF Preview state
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const pdfExportRef = useRef(null);
 
   // Initialize filter values and columns from config
   useEffect(() => {
@@ -64,7 +76,7 @@ const ReportPage = () => {
     if (!hasSearched || !appliedFilters || !reportConfig || !reportConfig.apiEndpoint) {
       return null;
     }
-    
+
     return {
       apiEndpoint: reportConfig.apiEndpoint, // Use backend endpoint from config
       filters: appliedFilters,
@@ -99,19 +111,28 @@ const ReportPage = () => {
   // Only show loading when query is actually enabled and running
   const isActuallyLoading = isQueryEnabled && isLoading;
 
-  // Extract rows and pagination from API response
+  // Extract rows and pagination from API response with safe fallbacks
   const rows = useMemo(() => {
     if (!reportData) return [];
+
+    // Try multiple extraction paths for maximum compatibility
     const items = extractItems(reportData) ?? [];
+
+    // Debug log for troubleshooting
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[ReportPage] Extracted items:', items?.length || 0, 'from reportData:', reportData);
+    }
+
     return items.map((row, index) => ({
       ...row,
-      id: row.id || row.jobno || row.houseNo || index + 1,
+      // Safe ID fallback: try multiple common ID field names (camelCase and lowercase)
+      id: row.id || row._id || row.jobNo || row.jobno || row.houseNo || row.houseNumber || row.sNo || row.slNo || index + 1,
     }));
   }, [reportData]);
 
   const paginationData = extractPagination(reportData);
-  const totalRows = Number.isFinite(paginationData.totalCount) 
-    ? paginationData.totalCount 
+  const totalRows = Number.isFinite(paginationData.totalCount)
+    ? paginationData.totalCount
     : rows.length;
 
   const pagination = {
@@ -249,17 +270,6 @@ const ReportPage = () => {
     onError: (error) => handleProvisionalError(error, 'Bulk Update Date'),
   });
 
-  // Export PDF Mutation
-  const exportPdfMutation = useMutation({
-    mutationFn: () =>
-      exportPdf({
-        apiEndpoint: reportConfig.apiEndpoint,
-        filters: appliedFilters || filterValues,
-        selectedIds: selectedRows.size > 0 ? Array.from(selectedRows) : null,
-      }),
-    onError: (error) => handleProvisionalError(error, 'Export PDF'),
-  });
-
   // Export CSV Mutation
   const exportCsvMutation = useMutation({
     mutationFn: () =>
@@ -283,10 +293,71 @@ const ReportPage = () => {
     bulkDateMutation.mutate({ recordIds, dateField, date });
   };
 
-  // Handle export PDF
+  // Handle export PDF - Uses ReportPdfExport component
   const handleExportPdf = () => {
-    if (!reportConfig) return;
-    exportPdfMutation.mutate();
+    if (!reportConfig || !pdfExportRef.current) {
+      console.warn('[ReportPage] Cannot generate PDF - missing config or ref');
+      return;
+    }
+
+    setIsGeneratingPdf(true);
+
+    try {
+      const url = pdfExportRef.current.generatePdf({
+        title: reportConfig.title,
+        columns,
+        rows,
+        filters: appliedFilters || {},
+      });
+
+      setPdfUrl(url);
+      setShowPdfPreview(true);
+    } catch (error) {
+      console.error('[ReportPage] Error generating PDF:', error);
+      notifyError("Error generating PDF. Please try again.");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  // Handle PDF modal actions
+  const handlePdfAction = (action) => {
+    if (!pdfUrl) return;
+
+    switch (action) {
+      case 'open':
+        window.open(pdfUrl, '_blank');
+        break;
+      case 'save':
+        const link = document.createElement('a');
+        link.href = pdfUrl;
+        link.download = `${reportConfig?.title?.replace(/\s+/g, '_') || 'report'}_${new Date().getTime()}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        break;
+      case 'print':
+        const printWindow = window.open(pdfUrl, '_blank');
+        if (printWindow) {
+          printWindow.onload = () => printWindow.print();
+        }
+        break;
+      case 'email':
+        // Could implement email functionality
+        notifyInfo("Email functionality not yet implemented");
+        break;
+      default:
+        break;
+    }
+  };
+
+  // Close PDF preview and cleanup
+  const handleClosePdfPreview = () => {
+    setShowPdfPreview(false);
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+      setPdfUrl(null);
+    }
   };
 
   // Handle export CSV
@@ -358,19 +429,19 @@ const ReportPage = () => {
 
 
       {/* Filter Panel */}
-          <ReportFilters
-            reportId={reportConfig.id}
-            filterConfig={reportConfig.filterConfig}
-            values={filterValues}
-            onChange={setFilterValues}
-            onResult={handleResult}
-            onReset={handleReset}
-            onRefresh={handleRefresh}
-            loading={isActuallyLoading}
-            hasSearched={hasSearched}
-            errors={errors}
-            showActions={false}
-          />
+      <ReportFilters
+        reportId={reportConfig.id}
+        filterConfig={reportConfig.filterConfig}
+        values={filterValues}
+        onChange={setFilterValues}
+        onResult={handleResult}
+        onReset={handleReset}
+        onRefresh={handleRefresh}
+        loading={isActuallyLoading}
+        hasSearched={hasSearched}
+        errors={errors}
+        showActions={false}
+      />
 
       {/* Unified actions: Result, Reset, View PDF, Download CSV (same row, below filters) */}
       <div className="d-flex gap-2 mt-3 mb-3 flex-nowrap align-items-center">
@@ -410,9 +481,9 @@ const ReportPage = () => {
             e.preventDefault();
             handleExportPdf();
           }}
-          disabled={exportPdfMutation.isLoading || !hasResults || !appliedFilters}
+          disabled={isGeneratingPdf || !hasResults || !appliedFilters}
         >
-          {exportPdfMutation.isLoading ? 'Generating PDF…' : 'View PDF'}
+          {isGeneratingPdf ? 'Generating PDF…' : 'View PDF'}
         </button>
         <button
           type="button"
@@ -439,7 +510,7 @@ const ReportPage = () => {
             onExportCsv={handleExportCsv}
             columns={columnsWithLinks}
             onColumnVisibilityChange={handleColumnVisibilityChange}
-            loading={isActuallyLoading || bulkStatusMutation.isLoading || bulkDateMutation.isLoading || exportPdfMutation.isLoading || exportCsvMutation.isLoading}
+            loading={isActuallyLoading || bulkStatusMutation.isLoading || bulkDateMutation.isLoading || isGeneratingPdf || exportCsvMutation.isLoading}
             showExport={false}
           />
 
@@ -457,6 +528,18 @@ const ReportPage = () => {
           />
         </>
       )}
+
+      {/* PDF Export Component (renders nothing, logic only) */}
+      <ReportPdfExport ref={pdfExportRef} />
+
+      {/* PDF Preview Modal */}
+      <PdfPreviewModal
+        pdfUrl={pdfUrl}
+        show={showPdfPreview}
+        onClose={handleClosePdfPreview}
+        onAction={handlePdfAction}
+        title={`${reportConfig?.title || 'Report'} - PDF Preview`}
+      />
     </div>
   );
 };

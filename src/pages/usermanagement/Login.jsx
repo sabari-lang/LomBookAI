@@ -9,6 +9,7 @@ import { handleProvisionalError } from "../../utils/handleProvisionalError";
 import { MOBILE_REQUIRED, onlyDigits } from "../../utils/validation";
 import { useNavigate } from "react-router-dom";
 import { images } from "../../assets/images/Image";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
 
 const Login = () => {
     const navigate = useNavigate();
@@ -44,10 +45,14 @@ const Login = () => {
             }
             queryClient.invalidateQueries(["users"]);
             queryClient.invalidateQueries(["me"]);
-            // alert("Login Successful!");
+            // notifySuccess("Login Successful!");
+            // Force navigation to Home before reload
+            window.location.hash = "#/";
             window.location.reload();
         },
-        onError: (err) => handleProvisionalError(err, "Login"),
+        onError: (err) => {
+            handleProvisionalError(err, "Login");
+        },
     });
 
     const onSubmit = (values) => {

@@ -1,14 +1,15 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getAirInboundCustomerAccountById } from "../../../Api";
 import moment from "moment";
 import PdfPreviewModal from "../../../../../../common/popup/PdfPreviewModal";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import { useAppBack } from "../../../../../../../hooks/useAppBack";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
 
 const ViewCustomerAccount = () => {
-    const navigate = useNavigate();
+    const { goBack } = useAppBack();
     const [entryData, setEntryData] = useState(null);
     const [masterData, setMasterData] = useState(null);
     const [houseData, setHouseData] = useState(null);
@@ -100,7 +101,7 @@ const ViewCustomerAccount = () => {
             setShowPreview(true);
         } catch (error) {
             console.error('Error generating PDF:', error);
-            alert('Failed to generate PDF preview');
+            notifyError("Failed to generate PDF preview");
         }
     };
 
@@ -125,7 +126,7 @@ const ViewCustomerAccount = () => {
             <div className="container p-4 text-center">
                 <h5>No Entry Selected</h5>
                 <p className="text-muted">Please select an entry from the list to view its details.</p>
-                <button className="btn btn-primary mt-3" onClick={() => navigate(-1)}>
+                <button className="btn btn-primary mt-3" onClick={() => goBack()}>
                     Go Back
                 </button>
             </div>
@@ -638,7 +639,14 @@ const ViewCustomerAccount = () => {
                 show={showPreview} 
                 pdfUrl={pdfUrl} 
                 title="Export Invoice" 
-                onClose={() => setShowPreview(false)} 
+                onClose={() => {
+                    setShowPreview(false);
+                    // Revoke ObjectURL to prevent memory leaks
+                    if (pdfUrl) {
+                        URL.revokeObjectURL(pdfUrl);
+                        setPdfUrl(null);
+                    }
+                }} 
                 onAction={handlePdfAction} 
             />
         </div>

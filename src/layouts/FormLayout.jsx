@@ -2,8 +2,8 @@ import React from "react";
 
 /**
  * FormLayout - Simple wrapper component for form pages
- * Note: Keyboard refresh is handled by useUnlockInputs hook in individual forms
- * Do not add global refreshKeyboard() here to prevent unnecessary window blinks
+ * Note: Keyboard refresh auto-calls are disabled by default to prevent blinking.
+ * Use manual "Fix keyboard input" button in Settings if needed.
  */
 const FormLayout = ({ children }) => {
   return <>{children}</>;

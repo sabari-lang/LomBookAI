@@ -17,6 +17,8 @@ import {
 import { handleProvisionalError } from "../../../../../../../utils/handleProvisionalError";
 import { MOBILE_OPTIONAL, onlyDigits } from "../../../../../../../utils/validation";
 import { extractItems } from "../../../../../../../utils/extractItems";
+import { refreshKeyboard } from "../../../../../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
 
 const safeNum = (v) => {
     const n = Number(v ?? 0);
@@ -131,27 +133,26 @@ const RaiseAccountingEntry = ({ editData }) => {
 
     const { control, handleSubmit, reset, setValue, formState: { errors } } = useForm({ defaultValues });
 
-    // Close modal function
-    const closeModal = () => {
+    // Close modal function - uses getOrCreateInstance for safety
+    const closeModalFn = () => {
         reset(defaultValues);
         
         const modalElement = document.getElementById("raiseAccountingModal");
         if (modalElement) {
             const bootstrap = window.bootstrap;
             if (bootstrap?.Modal) {
-                const modal = bootstrap.Modal.getInstance(modalElement);
-                if (modal) {
-                    modal.hide();
-                    return;
-                }
-            }
-            if (window.$) {
-                window.$(modalElement).modal("hide");
+                // Use getOrCreateInstance instead of getInstance (never returns null)
+                const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+                modal.hide();
+                
+                // Clean up any leftover backdrops after animation
+                setTimeout(() => {
+                    document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+                    document.body.classList.remove('modal-open');
+                    document.body.style.overflow = '';
+                    document.body.style.paddingRight = '';
+                }, 300);
                 return;
-            }
-            const closeBtn = modalElement.querySelector('[data-bs-dismiss="modal"]');
-            if (closeBtn) {
-                closeBtn.click();
             }
         }
     };
@@ -213,7 +214,7 @@ const RaiseAccountingEntry = ({ editData }) => {
         mutationFn: (payload) => createAirInboundCustomerAccount(jobNo, hawbNo, payload),
         onSuccess: () => {
             queryClient.invalidateQueries(["customerAccountingEntries", jobNo, hawbNo]);
-            alert("Customer accounting entry created");
+            notifySuccess("Customer accounting entry created");
             
             // Close modal using working pattern from CreateHouse.jsx
             const modalElement = document.getElementById("raiseAccountingModal");
@@ -243,7 +244,7 @@ const RaiseAccountingEntry = ({ editData }) => {
         mutationFn: (payload) => updateAirInboundCustomerAccount(jobNo, hawbNo, payload),
         onSuccess: () => {
             queryClient.invalidateQueries(["customerAccountingEntries", jobNo, hawbNo]);
-            alert("Customer accounting entry updated");
+            notifySuccess("Customer accounting entry updated");
             
             // Close modal using working pattern from CreateHouse.jsx
             const modalElement = document.getElementById("raiseAccountingModal");
@@ -549,7 +550,7 @@ const RaiseAccountingEntry = ({ editData }) => {
 
                     {/* FOOTER */}
                     <div className="modal-footer">
-                        <button className="btn btn-light" onClick={closeModal}>
+                        <button className="btn btn-light" onClick={closeModalFn}>
                             Cancel
                         </button>
 

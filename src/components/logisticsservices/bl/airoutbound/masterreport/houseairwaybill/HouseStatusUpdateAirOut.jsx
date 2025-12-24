@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import moment from "moment";
+import { refreshKeyboard } from "../../../../../../utils/refreshKeyboard";
 
 const labelStyle = {
     fontWeight: "700",
@@ -15,6 +16,8 @@ const titleStyle = {
 };
 
 const HouseStatusUpdateAirOut = ({ editData, setEditData, onSubmitStatus, isLoading = false }) => {
+    const isEditing = Boolean(editData?.id || editData?._id);
+    
     // Helper function to format date for input[type="date"]
     const formatDateForInput = (dateValue) => {
         if (!dateValue) return "";
@@ -89,6 +92,8 @@ const HouseStatusUpdateAirOut = ({ editData, setEditData, onSubmitStatus, isLoad
             courierDate: formatDateForInput(editData.courierDate),
         };
         reset(formattedData);
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
     }, [editData?.id]);
 
     const onSubmit = (formData) => {
@@ -126,7 +131,7 @@ const HouseStatusUpdateAirOut = ({ editData, setEditData, onSubmitStatus, isLoad
                     {/* HEADER */}
                     <div className="modal-header">
                         <h5 className="modal-title" style={titleStyle}>Status Update</h5>
-                        <button className="btn-close" data-bs-dismiss="modal" onClick={handleClose}></button>
+                        <button type="button" className="btn-close" data-bs-dismiss="modal" onClick={handleClose}></button>
                     </div>
 
                     <form onSubmit={handleSubmit(onSubmit)}>

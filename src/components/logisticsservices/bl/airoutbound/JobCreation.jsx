@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { Search, X } from "react-bootstrap-icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -6,12 +6,19 @@ import { createAirOutboundJob, updateAirOutboundJob } from "./airOutboundApi";
 import moment from "moment/moment";
 import NewWindow from "react-new-window";
 import CustomerSearch from "../../../common/popup/CustomerSearch";
-import { useUnlockInputs } from "../../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../../utils/refreshKeyboard";
+import { closeModal, cleanupModalBackdrop } from "../../../../utils/closeModal";
+import { SHIPMENT_CATEGORY } from "../../../../constants/shipment";
+import { INCOTERMS_CONFIG, INCOTERMS_DEFAULTS } from "../../../../constants/incotermsConfig";
+import { DEFAULT_SHIPPER } from "../../../../utils/defaultPartyInfo";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../utils/notifications";
+import { applyJobDefaults, applyShipmentTermPaymentLogic, normalizeJobDates } from "../../../../utils/jobDefaults";
 
 
 
-const initialValues = {
+const baseInitialValues = {
     jobNo: "",
+    masterDate: null,
     blType: "Master B/L",
     consol: "Consol",
     exportType: "Export",
@@ -20,13 +27,20 @@ const initialValues = {
     status: "Open",
     branch: "HEAD OFFICE",
 
-    shipperName: "LOM LOGISTICS INDIA PVT LTD",
-    shipperAddress: "NO.151, VILLAGE ROAD, 7TH FLOOR,\nGEE GEE EMERALD BUILDING, NUNGAMBAKKAM,\nCHENNAI - 600034 , TAMILNADU- INDIA\nTEL: 044 66455913 FAX: 044 66455913",
+
+    airline: "",
+    flightNumber: "",
+    flightDate: null,
+    origin: "",
+    destination: "",
+
+    shipperName: "",
+    shipperAddress: "",
     airWayBill: "",
+    airWayBillAddress: "",
 
     consigneeName: "",
-    consigneeAddress:
-        "",
+    consigneeAddress: "",
 
     notifyName: "",
     notifyAddress: "",
@@ -40,8 +54,8 @@ const initialValues = {
 
     airportDestination: "",
     flightNo: "",
-    departureDate: "",
-    arrivalDate: "",
+    departureDate: null,
+    arrivalDate: null,
     handlingInfo: "",
 
     accountingInfo: "",
@@ -61,49 +75,51 @@ const initialValues = {
     insurance: "NIL",
     freightTerm: "",
 
-    pieces: "",
-    grossWeight: "",
+    pieces: null,
+    grossWeight: null,
     kgLb: "KG",
     rateClass: "Q",
-    chargeableWeight: "",
-    rateCharge: "",
-    arranged: false,
-    totalCharge: "",
+    chargeableWeight: null,
+    rateCharge: null,
+    arranged: 0,
+    totalCharge: null,
 
     natureGoods: "",
 
-    weightPrepaid: "",
-    weightCollect: "",
-    valuationPrepaid: "",
-    valuationCollect: "",
-    taxPrepaid: "",
-    taxCollect: "",
-    agentPrepaid: "",
-    agentCollect: "",
-    carrierPrepaid: "",
-    carrierCollect: "",
-    totalPrepaid: "",
-    totalCollect: "",
+    weightPrepaid: null,
+    weightCollect: null,
+    valuationPrepaid: null,
+    valuationCollect: null,
+    taxPrepaid: null,
+    taxCollect: null,
+    agentPrepaid: null,
+    agentCollect: null,
+    carrierPrepaid: null,
+    carrierCollect: null,
+    totalPrepaid: null,
+    totalCollect: null,
 
-    executedDate: "",
+    executedDate: null,
     placeAt: "CHENNAI",
     signature: "LOM TECHNOLOGY",
+    notes: "",
 }
+const initialValues = applyJobDefaults(baseInitialValues);
 
 const JobCreation = ({ editData, setEditData }) => {
-    const { register, handleSubmit, control, reset, watch, setValue } = useForm({
+    const { register, handleSubmit, control, reset, watch, setValue, setError, clearErrors, getValues } = useForm({
         defaultValues: initialValues
     });
 
     const [open, setOpen] = useState(false);
     const [searchTarget, setSearchTarget] = useState(null);
     const [isLoadingEdit, setIsLoadingEdit] = useState(false);
+    const [sameAsConsignee, setSameAsConsignee] = useState(false);
+    const [copyAsConsignee, setCopyAsConsignee] = useState(false);
+    const prevConsolRef = useRef(null);
 
     const isEditing = Boolean(editData?.id);
     const queryClient = useQueryClient();
-
-    // ✅ Keyboard unlock hook for edit mode
-    useUnlockInputs(isEditing);
 
     // Edit Form Data
     useEffect(() => {
@@ -113,75 +129,118 @@ const JobCreation = ({ editData, setEditData }) => {
         }
 
         setIsLoadingEdit(true);
-        reset({
-            ...initialValues, // BASE DEFAULTS
-            ...editData,        // OVERRIDE WITH API DATA
-            arrivalDate: editData?.arrivalDate
-                ? moment(editData.arrivalDate).format("YYYY-MM-DD")
-                : "",
+        const merged = applyShipmentTermPaymentLogic(
+            applyJobDefaults({
+                ...initialValues, // BASE DEFAULTS
+                ...editData,        // OVERRIDE WITH API DATA
+                arrivalDate: editData?.arrivalDate
+                    ? moment(editData.arrivalDate).format("YYYY-MM-DD")
+                    : "",
+                departureDate: editData?.departureDate
+                    ? moment(editData.departureDate).format("YYYY-MM-DD")
+                    : "",
+                executedDate: editData?.executedDate
+                    ? moment(editData.executedDate).format("YYYY-MM-DD")
+                    : "",
 
-            departureDate: editData?.departureDate
-                ? moment(editData.departureDate).format("YYYY-MM-DD")
-                : "",
-            executedDate: editData?.executedDate
-                ? moment(editData.executedDate).format("YYYY-MM-DD")
-                : "",
+            })
+        );
+        reset(merged);
 
-        });
+        // Reset checkbox states based on loaded data
+        const notifyName = editData?.notifyName || "";
+        setSameAsConsignee(notifyName === "SAME AS CONSIGNEE");
+        setCopyAsConsignee(false); // Reset copy checkbox on edit load
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
         // Allow form to settle after reset, then disable edit loading flag
         const timer = setTimeout(() => setIsLoadingEdit(false), 100);
         return () => clearTimeout(timer);
     }, [editData?.id]);
 
-    // Keep shipper defaulted when consol === 'Consol'
+    // OCR create-mode prefill (when editData exists but has no id)
+    useEffect(() => {
+        if (!editData || editData?.id) return;
+        const merged = applyShipmentTermPaymentLogic(
+            applyJobDefaults({
+                ...initialValues,
+                ...editData,
+                arrivalDate: editData?.arrivalDate ? moment(editData.arrivalDate).format("YYYY-MM-DD") : "",
+                departureDate: editData?.departureDate ? moment(editData.departureDate).format("YYYY-MM-DD") : "",
+                executedDate: editData?.executedDate ? moment(editData.executedDate).format("YYYY-MM-DD") : "",
+            })
+        );
+        reset(merged);
+    }, [editData, reset]);
+
+    // Auto-fill shipper when consol === 'Consol' (Outbound)
     const consolValue = watch("consol");
     useEffect(() => {
         // Skip if we're in the process of loading edit data
         if (isLoadingEdit) return;
+        // Skip consol-based auto-fill when editing - preserve existing data
+        if (isEditing) return;
 
-        if (consolValue === "Consol") {
-            // Only set defaults if not in edit mode
-            if (!isEditing) {
-                setValue("shipperName", initialValues.shipperName || "");
-                setValue("shipperAddress", initialValues.shipperAddress || "");
+        const isConsol = consolValue === "Consol" || consolValue === "CONSOL";
+        
+        if (isConsol) {
+            // Only auto-fill if fields are empty (don't overwrite user input)
+            const currentName = watch("shipperName");
+            const currentAddress = watch("shipperAddress");
+            
+            if (!currentName && !currentAddress) {
+                setValue("shipperName", DEFAULT_SHIPPER.shipperName);
+                setValue("shipperAddress", DEFAULT_SHIPPER.shipperAddress);
             }
         } else {
-            // when not Consol, clear shipper fields to allow user input
-            if (!isEditing) {
+            // When Single is selected, clear defaults (only if they match default values)
+            const currentName = watch("shipperName");
+            const currentAddress = watch("shipperAddress");
+            
+            if (currentName === DEFAULT_SHIPPER.shipperName && 
+                currentAddress === DEFAULT_SHIPPER.shipperAddress) {
                 setValue("shipperName", "");
                 setValue("shipperAddress", "");
             }
         }
     }, [consolValue, setValue, isEditing, isLoadingEdit]);
 
+    // Consol/Single change handler - always clear consignee + notify on change
+    useEffect(() => {
+        if (isLoadingEdit) return;
+        
+        // Only clear if consol actually changed (not on initial mount)
+        if (prevConsolRef.current !== null && prevConsolRef.current !== consolValue) {
+            // Always clear consignee and notify when consol changes
+            setValue("consigneeName", "");
+            setValue("consigneeAddress", "");
+            setValue("notifyName", "");
+            setValue("notifyAddress", "");
+            setSameAsConsignee(false);
+            setCopyAsConsignee(false);
+        }
+        
+        prevConsolRef.current = consolValue;
+    }, [consolValue, setValue, isLoadingEdit]);
 
-    // Helper to close Bootstrap modal
-    const closeModal = () => {
+
+    // Helper to close Bootstrap modal using shared utility
+    const handleCloseModal = () => {
         reset(initialValues);
         setEditData?.(null);
-        
-        const modalElement = document.getElementById("createOutboundJobcreationModal");
-        if (modalElement) {
-            // Try Bootstrap 5 API first
-            const bootstrap = window.bootstrap;
-            if (bootstrap?.Modal) {
-                const modal = bootstrap.Modal.getInstance(modalElement);
-                if (modal) {
-                    modal.hide();
-                    return;
-                }
-            }
-            // Fallback: use jQuery/bootstrap if available
-            if (window.$) {
-                window.$(modalElement).modal("hide");
-                return;
-            }
-            // Last resort: trigger close button click
-            const closeBtn = modalElement.querySelector('[data-bs-dismiss="modal"]');
-            if (closeBtn) {
-                closeBtn.click();
-            }
-        }
+        closeModal("createOutboundJobcreationModal");
+        cleanupModalBackdrop();
+    };
+
+    const applyTermPayments = (termValue) => {
+        const updated = applyShipmentTermPaymentLogic({
+            ...getValues(),
+            shipment: termValue,
+        });
+        if (updated.wtvalPP !== undefined) setValue("wtvalPP", updated.wtvalPP);
+        if (updated.otherPP !== undefined) setValue("otherPP", updated.otherPP);
+        if (updated.coll1 !== undefined) setValue("coll1", updated.coll1);
+        if (updated.coll2 !== undefined) setValue("coll2", updated.coll2);
     };
 
     // POST API 
@@ -189,8 +248,8 @@ const JobCreation = ({ editData, setEditData }) => {
         mutationFn: createAirOutboundJob,
         onSuccess: () => {
             queryClient.invalidateQueries(["airOutboundJobs"]);
-            alert("Job Created Successfully");
-            closeModal();
+            notifySuccess("Job Created Successfully");
+            handleCloseModal();
         },
         onError: (error) => {
             const message =
@@ -199,7 +258,7 @@ const JobCreation = ({ editData, setEditData }) => {
                 error?.message ||
                 "Something went wrong while creating the job.";
 
-            alert(`Create Failed: ${message}`);
+            notifyError(`Create Failed: ${message}`);
         },
     });
 
@@ -208,8 +267,8 @@ const JobCreation = ({ editData, setEditData }) => {
         mutationFn: ({ id, payload }) => updateAirOutboundJob(id, payload),
         onSuccess: () => {
             queryClient.invalidateQueries(["airOutboundJobs"]);
-            alert("Job Updated Successfully");
-            closeModal();
+            notifySuccess("Job Updated Successfully");
+            handleCloseModal();
         },
         onError: (error) => {
             const message =
@@ -218,54 +277,136 @@ const JobCreation = ({ editData, setEditData }) => {
                 error?.message ||
                 "Something went wrong while updating the job.";
 
-            alert(`Update Failed: ${message}`);
+            notifyError(`Update Failed: ${message}`);
         },
     });
+
+    // Auto-update all incoterm fields based on shipment
+    const shipment = watch("shipment");
+    useEffect(() => {
+        // Skip auto-population during edit mode load
+        if (isLoadingEdit) return;
+        
+        // Clear prior mandatory field errors
+        clearErrors(["airportDeparture", "airportDestination", "arrivalDate"]);
+
+        if (!shipment || shipment === "--Select--") {
+            // Clear incoterm-dependent fields
+            setValue("freightTerm", "");
+            setValue("wtvalPP", "");
+            setValue("otherPP", "");
+            setValue("coll1", "");
+            setValue("coll2", "");
+            // Keep global defaults as-is
+            return;
+        }
+
+        const config = INCOTERMS_CONFIG[shipment];
+        if (!config) {
+            setValue("freightTerm", "");
+            setValue("wtvalPP", "");
+            setValue("otherPP", "");
+            setValue("coll1", "");
+            setValue("coll2", "");
+            applyTermPayments(shipment);
+            return;
+        }
+
+        // Only auto-populate if not in edit mode OR if fields are empty
+        // In edit mode, only populate if user actively changes shipment
+        if (!isEditing || !watch("freightTerm")) {
+            setValue("freightTerm", config.freightTerm);
+        }
+applyTermPayments(shipment);
+
+        // Ensure global defaults are set (if empty)
+        const currentDeclaredCarriage = watch("declaredCarriage");
+        const currentDeclaredCustoms = watch("declaredCustoms");
+        const currentInsurance = watch("insurance");
+        const currentPlaceAt = watch("placeAt");
+        const currentSignature = watch("signature");
+
+        if (!currentDeclaredCarriage) setValue("declaredCarriage", INCOTERMS_DEFAULTS.declaredCarriage);
+        if (!currentDeclaredCustoms) setValue("declaredCustoms", INCOTERMS_DEFAULTS.declaredCustoms);
+        if (!currentInsurance) setValue("insurance", INCOTERMS_DEFAULTS.insurance);
+        if (!currentPlaceAt) setValue("placeAt", INCOTERMS_DEFAULTS.placeAt);
+        if (!currentSignature) setValue("signature", INCOTERMS_DEFAULTS.signature);
+    }, [shipment, setValue, isEditing, isLoadingEdit, clearErrors]);
 
 
 
 
 
     // Form Submit
-    const onSubmit = (data) => {
+    const onSubmit = (formValues) => {
+
+        const toNumberOrNull = (v) => {
+            if (v === "" || v === null || v === undefined) return null;
+            const n = typeof v === "string" ? Number(v.trim()) : Number(v);
+            return Number.isFinite(n) ? n : null;
+        };
+
         // Convert consol string → boolean
-        data.consol = data?.consol === "Consol";
+        let payload = applyJobDefaults(formValues);
+        payload = applyShipmentTermPaymentLogic(payload);
+        payload.consol = payload?.consol === "Consol";
 
-        // Convert wtvalPP → number or null
-        data.wtvalPP = data?.wtvalPP ? Number(data.wtvalPP) : null;
 
-        // Convert coll1 → number or null
-        data.coll1 = data?.coll1 ? Number(data.coll1) : null;
+        // Map UI airWayBillAddress to API agentAddress
+        payload.agentAddress = payload?.agentAddress || payload?.airWayBillAddress || "";
+        // Keep wtvalPP, coll1, otherPP, coll2 as strings (P or C)
+        payload.wtvalPP = payload?.wtvalPP || "";
+        payload.coll1 = payload?.coll1 || "";
+        payload.otherPP = payload?.otherPP || "";
+        payload.coll2 = payload?.coll2 || "";
 
-        // Convert otherPP → number or null
-        data.otherPP = data?.otherPP ? Number(data.otherPP) : null;
-
-        // Convert coll2 → number or null
-        data.coll2 = data?.coll2 ? Number(data.coll2) : null;
-
-        // Convert declaredCarriage → number or null
-        data.declaredCarriage = data?.declaredCarriage
-            ? Number(data.declaredCarriage)
-            : null;
-
-        // Convert declaredCustoms → number or null
-        data.declaredCustoms = data?.declaredCustoms
-            ? Number(data.declaredCustoms)
-            : null;
-
-        // Convert insurance → number or null
-        data.insurance = data?.insurance ? Number(data.insurance) : null;
+        // Keep declaredCarriage, declaredCustoms, insurance as strings
+        payload.declaredCarriage = payload?.declaredCarriage || "";
+        payload.declaredCustoms = payload?.declaredCustoms || "";
+        payload.insurance = payload?.insurance || "";
 
         // Convert arranged checkbox → 1 or 0
-        data.arranged = data?.arranged ? 1 : 0;
+        payload.arranged = payload?.arranged ? 1 : 0;
+
+        // Convert empty date strings to null
+        payload.departureDate = payload?.departureDate || null;
+        payload.arrivalDate = payload?.arrivalDate || null;
+        payload.executedDate = payload?.executedDate || null;
+
+
+        // Convert empty master/flight dates to null
+        payload.masterDate = payload?.masterDate || null;
+        payload.flightDate = payload?.flightDate || null;
+        // Convert numeric fields to number or null
+        payload.pieces = toNumberOrNull(payload?.pieces);
+        payload.grossWeight = toNumberOrNull(payload?.grossWeight);
+        payload.chargeableWeight = toNumberOrNull(payload?.chargeableWeight);
+        payload.rateCharge = toNumberOrNull(payload?.rateCharge);
+        payload.totalCharge = toNumberOrNull(payload?.totalCharge);
+
+        // Convert prepaid/collect fields to number or null
+        payload.weightPrepaid = toNumberOrNull(payload?.weightPrepaid);
+        payload.weightCollect = toNumberOrNull(payload?.weightCollect);
+        payload.valuationPrepaid = toNumberOrNull(payload?.valuationPrepaid);
+        payload.valuationCollect = toNumberOrNull(payload?.valuationCollect);
+        payload.taxPrepaid = toNumberOrNull(payload?.taxPrepaid);
+        payload.taxCollect = toNumberOrNull(payload?.taxCollect);
+        payload.agentPrepaid = toNumberOrNull(payload?.agentPrepaid);
+        payload.agentCollect = toNumberOrNull(payload?.agentCollect);
+        payload.carrierPrepaid = toNumberOrNull(payload?.carrierPrepaid);
+        payload.carrierCollect = toNumberOrNull(payload?.carrierCollect);
+        payload.totalPrepaid = toNumberOrNull(payload?.totalPrepaid);
+        payload.totalCollect = toNumberOrNull(payload?.totalCollect);
+
+        payload = normalizeJobDates(payload);
 
         if (isEditing) {
             updateMutation.mutate({
                 id: editData?.jobNo,   // or editData?.id
-                payload: data,
+                payload,
             });
         } else {
-            createMutation.mutate(data);
+            createMutation.mutate(payload);
         }
     };
 
@@ -273,17 +414,29 @@ const JobCreation = ({ editData, setEditData }) => {
 
 
     const handleSameAsConsignee = (checked) => {
+        setSameAsConsignee(checked);
         if (checked) {
-            const consigneeName = watch("consigneeName");
-            const consigneeAddress = watch("consigneeAddress");
-
-            setValue("notifyName", consigneeName || "");
-            setValue("notifyAddress", consigneeAddress || "");
+            setValue("notifyName", "SAME AS CONSIGNEE");
+            setValue("notifyAddress", "");
+            setCopyAsConsignee(false);
         } else {
+            // Clear notify fields when unchecked
             setValue("notifyName", "");
             setValue("notifyAddress", "");
         }
-    }
+    };
+
+    const handleCopyAsConsignee = (checked) => {
+        setCopyAsConsignee(checked);
+        if (checked) {
+            const consigneeName = watch("consigneeName");
+            const consigneeAddress = watch("consigneeAddress");
+            setValue("notifyName", consigneeName || "");
+            setValue("notifyAddress", consigneeAddress || "");
+            setSameAsConsignee(false);
+        }
+        // When unchecked, leave notify fields as user edited (don't force clear)
+    };
 
 
 
@@ -329,11 +482,15 @@ const JobCreation = ({ editData, setEditData }) => {
                                         <Controller
                                             name="jobNo"
                                             control={control}
-                                            render={({ field }) => (
-                                                <input className="form-control" {...field} />
+                                            rules={{ required: "Job No is required" }}
+                                            render={({ field, fieldState: { error } }) => (
+                                                <>
+                                                    <input className={`form-control ${error ? "is-invalid" : ""}`} {...field} />
+                                                    {error && <div className="invalid-feedback d-block">{error.message}</div>}
+                                                </>
                                             )}
                                         />
-                                    </div>
+</div>
 
                                     <div className="col-md-3">
                                         <label className="fw-bold">B/L Type</label>
@@ -517,7 +674,7 @@ const JobCreation = ({ editData, setEditData }) => {
                                         {/* LABEL + CHECKBOXES IN SAME ROW */}
                                         <div className="d-flex align-items-center gap-3 mb-1">
                                             <label className="fw-bold d-flex align-items-center gap-2 mb-0">
-                                                Notify Name & Address <Search size={15} onClick={() => { setSearchTarget('notify'); setOpen(true); }} style={{ cursor: 'pointer' }} />
+                                                Notify Name & Address <Search size={15} onClick={() => { if (!sameAsConsignee) { setSearchTarget('notify'); setOpen(true); } }} style={{ cursor: sameAsConsignee ? 'not-allowed' : 'pointer', opacity: sameAsConsignee ? 0.5 : 1 }} />
                                             </label>
 
                                             {/* SAME AS CONSIGNEE */}
@@ -525,9 +682,21 @@ const JobCreation = ({ editData, setEditData }) => {
                                                 <input
                                                     type="checkbox"
                                                     className="me-2"
+                                                    checked={sameAsConsignee}
                                                     onChange={(e) => handleSameAsConsignee(e.target.checked)}
                                                 />
                                                 SAME AS CONSIGNEE
+                                            </label>
+
+                                            {/* COPY AS CONSIGNEE */}
+                                            <label className="fw-bold small mb-0 d-flex align-items-center">
+                                                <input
+                                                    type="checkbox"
+                                                    className="me-2"
+                                                    checked={copyAsConsignee}
+                                                    onChange={(e) => handleCopyAsConsignee(e.target.checked)}
+                                                />
+                                                COPY AS CONSIGNEE
                                             </label>
                                         </div>
 
@@ -536,7 +705,7 @@ const JobCreation = ({ editData, setEditData }) => {
                                             name="notifyName"
                                             control={control}
                                             render={({ field }) => (
-                                                <input className="form-control mb-2" {...field} />
+                                                <input className="form-control mb-2" {...field} disabled={sameAsConsignee} />
                                             )}
                                         />
 
@@ -544,7 +713,7 @@ const JobCreation = ({ editData, setEditData }) => {
                                             name="notifyAddress"
                                             control={control}
                                             render={({ field }) => (
-                                                <textarea className="form-control" rows={4} {...field}></textarea>
+                                                <textarea className="form-control" rows={4} {...field} disabled={sameAsConsignee}></textarea>
                                             )}
                                         />
                                     </div>
@@ -589,7 +758,10 @@ const JobCreation = ({ editData, setEditData }) => {
                                             </div>
                                         </div>
 
-                                        <label className="fw-bold mt-3">Airport of Departure</label>
+                                        <label className="fw-bold mt-3 d-flex align-items-center gap-2">
+                                            Airport of Departure
+                                            <Search size={15} onClick={() => { setSearchTarget("airportDeparture"); setOpen(true); }} style={{ cursor: 'pointer' }} />
+                                        </label>
                                         <Controller
                                             name="airportDeparture"
                                             control={control}
@@ -624,7 +796,10 @@ const JobCreation = ({ editData, setEditData }) => {
 
                                         <div className="row g-3 mt-3">
                                             <div className="col-md-6">
-                                                <label className="fw-bold">Airport of Destination</label>
+                                                <label className="fw-bold d-flex align-items-center gap-2">
+                                                    Airport of Destination
+                                                    <Search size={15} onClick={() => { setSearchTarget("airportDestination"); setOpen(true); }} style={{ cursor: 'pointer' }} />
+                                                </label>
                                                 <Controller
                                                     name="airportDestination"
                                                     control={control}
@@ -804,7 +979,7 @@ const JobCreation = ({ editData, setEditData }) => {
                                                     name="freightTerm"
                                                     control={control}
                                                     render={({ field }) => (
-                                                        <input className="form-control" {...field} />
+                                                        <input className="form-control" {...field} readOnly />
                                                     )}
                                                 />
                                             </div>
@@ -1111,6 +1286,10 @@ const JobCreation = ({ editData, setEditData }) => {
                                 setValue("issuingAgent", name);
                             } else if (searchTarget === 'airWayBill') {
                                 setValue("airWayBill", name);
+                            } else if (searchTarget === 'airportDeparture') {
+                                setValue("airportDeparture", name);
+                            } else if (searchTarget === 'airportDestination') {
+                                setValue("airportDestination", name);
                             }
 
                             setOpen(false);

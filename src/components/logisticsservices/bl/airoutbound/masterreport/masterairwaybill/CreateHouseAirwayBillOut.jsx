@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import moment from 'moment';
 import React, { useEffect } from 'react'
 import { useForm, Controller } from "react-hook-form";
-import { useUnlockInputs } from "../../../../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../../../../utils/refreshKeyboard";
 
 
 const CreateHouseAirwayBillOut = ({ editData, setEditData }) => {
@@ -108,9 +108,6 @@ const CreateHouseAirwayBillOut = ({ editData, setEditData }) => {
     const isEditing = Boolean(editData?.id);
     const queryClient = useQueryClient();
 
-    // ✅ Keyboard unlock hook for edit mode
-    useUnlockInputs(isEditing);
-
     // Edit Form Data
     useEffect(() => {
         if (!storedData) return;
@@ -132,6 +129,8 @@ const CreateHouseAirwayBillOut = ({ editData, setEditData }) => {
                 ? moment(storedData.shipperInvoiceDate).format("YYYY-MM-DD")
                 : "",
         });
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
     }, [reset]);
 
 

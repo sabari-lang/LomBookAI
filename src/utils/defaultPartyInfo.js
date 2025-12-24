@@ -1,0 +1,14 @@
+/**
+ * Default Party Information Constants
+ * Used for auto-filling party details based on consol type
+ */
+
+export const DEFAULT_CONSIGNEE = {
+  consigneeName: "LOM LOGISTICS INDIA PVT LTD",
+  consigneeAddress: "NO.151, VILLAGE ROAD, 7TH FLOOR,\nGEE GEE EMERALD BUILDING, NUNGAMBAKKAM,\nCHENNAI - 600034 , TAMILNADU- INDIA\nTEL: 044 66455913 FAX: 044 66455913",
+};
+
+export const DEFAULT_SHIPPER = {
+  shipperName: "LOM LOGISTICS INDIA PVT LTD",
+  shipperAddress: "NO.151, VILLAGE ROAD, 7TH FLOOR,\nGEE GEE EMERALD BUILDING, NUNGAMBAKKAM,\nCHENNAI - 600034 , TAMILNADU- INDIA\nTEL: 044 66455913 FAX: 044 66455913",
+};

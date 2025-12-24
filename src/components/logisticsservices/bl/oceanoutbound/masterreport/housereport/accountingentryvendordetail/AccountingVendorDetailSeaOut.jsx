@@ -25,7 +25,7 @@ const AccountingVendorDetailSeaOut = () => {
 
     // API Query
     const { data: apiRaw, isLoading, isError } = useQuery({
-        queryKey: ["vendorSeaOutbound", jobNo, hbl, currentPage, pageSize],
+        queryKey: ["oceanOutboundVendor", jobNo, hbl, currentPage, pageSize],
         queryFn: () =>
             getOceanOutboundVendorAccounts(jobNo, hbl, {
                 page: currentPage,

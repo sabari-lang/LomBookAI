@@ -15,6 +15,8 @@ import { extractPagination } from "../../../../../../utils/extractPagination";
 import { extractItems } from "../../../../../../utils/extractItems";
 
 import { getOceanInboundHouses, deleteOceanInboundHouse, updateOceanInboundHouseStatus } from "../../oceanInboundApi";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../utils/notifications";
+import { confirm } from "../../../../../../utils/confirm";
 
 const HouseBillOfLaddingSeaInbound = () => {
     const navigate = useNavigate();
@@ -29,12 +31,16 @@ const HouseBillOfLaddingSeaInbound = () => {
     const [entriesPerPage, setEntriesPerPage] = useState(10);
     const [search, setSearch] = useState("");
 
-    // MASTER data from session
-    const storedData = JSON.parse(
-        sessionStorage.getItem("masterAirwayData") || "{}"
-    );
 
-    const jobNo = storedData?.jobNo ?? "";
+    // MASTER and HOUSE data from session (for future extensibility)
+    const masterData = JSON.parse(sessionStorage.getItem("masterAirwayData") || "{}") || {};
+    const houseData = JSON.parse(sessionStorage.getItem("houseAirwayData") || "{}") || {};
+
+    // console.log("masterData", masterData);
+  
+
+    // Prefer jobNo from houseData, fallback to masterData
+    const jobNo = masterData?.jobNo ?? "";
 
     // ========== API CALL (Same as HouseAirWayBillOut) ==========
     const { data: apiRaw, isLoading, isError } = useQuery({
@@ -62,7 +68,7 @@ const HouseBillOfLaddingSeaInbound = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["oceanInboundHouseList", jobNo] });
             setEditData(null);
-            alert("Status updated successfully!");
+            notifySuccess("Status updated successfully!");
             const modalElement = document.getElementById("seainboundHouseStatusUpdateModal");
             if (modalElement) {
                 const modal = window.bootstrap?.Modal.getInstance(modalElement);
@@ -72,13 +78,14 @@ const HouseBillOfLaddingSeaInbound = () => {
         onError: (error) => handleProvisionalError(error, "Status Update"),
     });
 
-    const handleDelete = (row) => {
+    const handleDelete = async (row) => {
         const hblNo = row.hbl ?? row.hblNo;
         if (!hblNo || !jobNo) {
-            alert("Missing jobNo or hblNo information");
+            notifyError("Missing jobNo or hblNo information");
             return;
         }
-        if (window.confirm(`Are you sure you want to delete house ${hblNo}?`)) {
+        const confirmed = await confirm(`Are you sure you want to delete house ${hblNo}?`);
+        if (confirmed) {
             deleteMutation.mutate({ jobNo, hblNo });
         }
     };
@@ -87,7 +94,7 @@ const HouseBillOfLaddingSeaInbound = () => {
         if (!editData) return;
         const hblNo = editData.hbl ?? editData.hblNo;
         if (!hblNo || !jobNo) {
-            alert("Missing jobNo or hblNo information");
+            notifyError("Missing jobNo or hblNo information");
             return;
         }
         statusUpdateMutation.mutate({ jobNo, hblNo, payload: formData });
@@ -95,6 +102,8 @@ const HouseBillOfLaddingSeaInbound = () => {
 
     // Extract rows safely
     const allItems = extractItems(apiRaw) ?? [];
+
+    console.log("API Raw Data:", apiRaw);
 
     // Extract pagination
     const { totalPages: rawTotalPages, totalCount: rawTotalCount } =
@@ -128,6 +137,8 @@ const HouseBillOfLaddingSeaInbound = () => {
     );
 
     const rowsToRender = search ? filtered : paginated;
+
+    console.log("rowsToRender", rowsToRender);
 
     const handlePageChange = (page) => {
         if (!page) return;
@@ -246,8 +257,9 @@ const HouseBillOfLaddingSeaInbound = () => {
 
                                     {!isLoading &&
                                         !isError &&
-                                        rowsToRender.map((row = {}) => {
+                                        rowsToRender?.map((row = {}) => {
                                             const safeRow = row ?? {};
+                                            console.log("row", safeRow);
 
                                             return (
                                                 <tr key={safeRow.id ?? Math.random()}>
@@ -330,8 +342,8 @@ const HouseBillOfLaddingSeaInbound = () => {
             </div>
 
             <CreateHouseSeaInbound editData={editData} setEditData={setEditData} />
-            <HouseStatusUpdateSeaIn 
-                editData={editData} 
+            <HouseStatusUpdateSeaIn
+                editData={editData}
                 setEditData={setEditData}
                 onSubmitStatus={handleStatusUpdate}
                 isLoading={statusUpdateMutation.isPending}

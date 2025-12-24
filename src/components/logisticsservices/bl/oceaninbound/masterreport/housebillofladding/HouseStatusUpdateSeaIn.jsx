@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import moment from "moment";
+import { refreshKeyboard } from "../../../../../../utils/refreshKeyboard";
 
 const labelStyle = {
     fontWeight: "700",
@@ -15,6 +16,7 @@ const titleStyle = {
 };
 
 const HouseStatusUpdateSeaIn = ({ editData, setEditData, onSubmitStatus, isLoading = false }) => {
+    const isEditing = Boolean(editData?.id || editData?._id);
 
     const { register, handleSubmit, reset } = useForm({
         defaultValues: {
@@ -82,6 +84,8 @@ const HouseStatusUpdateSeaIn = ({ editData, setEditData, onSubmitStatus, isLoadi
             departureDate: formatDateForInput(editData.departureDate || editData.etd || editData.departure),
         };
         reset(formattedData);
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
     }, [editData?.id]);
 
     const onSubmit = (values) => {

@@ -13,6 +13,8 @@ import VendorSearch from "../../../../../../common/popup/VendorSearch";
 
 import { handleProvisionalError } from "../../../../../../../utils/handleProvisionalError";
 import { createOceanOutboundVendorAccount, updateOceanOutboundVendorAccount } from "../../../oceanOutboundApi";
+import { refreshKeyboard } from "../../../../../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
 
 
 // ---------------------------------------------
@@ -56,6 +58,8 @@ const sampleRow = () => ({
 });
 
 const RaisingEntryVendorSeaOut = ({ editData, setEditData }) => {
+  const isEditing = Boolean(editData?.id || editData?._id);
+
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [searchTarget, setSearchTarget] = useState(null);
@@ -66,6 +70,8 @@ const RaisingEntryVendorSeaOut = ({ editData, setEditData }) => {
   const storedMaster = JSON.parse(
     sessionStorage.getItem("masterAirwayData") || "{}"
   );
+
+  console.log("storedMaster", storedMaster);
   const storedHouse = JSON.parse(
     sessionStorage.getItem("houseAirwayData") || "{}"
   );
@@ -75,9 +81,17 @@ const RaisingEntryVendorSeaOut = ({ editData, setEditData }) => {
     safeStr(storedHouse?.hbl) ||
     safeStr(storedHouse?.hblNo) ||
     safeStr(storedHouse?.houseNumber);
-  const mblNo = safeStr(storedHouse?.mawb);
+  const mblNo = safeStr(
+    storedHouse?.mblNo ??
+    storedHouse?.mbl ??
+    storedHouse?.mawb ??
+    storedMaster?.mblNo ??
+    storedMaster?.mbl ??
+    storedMaster?.mawb ??
+    ""
+  );
 
-  const isEditing = Boolean(editData?.id || editData?._id);
+
 
   // ---------------------------------------------
   // Default Values
@@ -116,7 +130,7 @@ const RaisingEntryVendorSeaOut = ({ editData, setEditData }) => {
     control,
     name: "items",
   });
-
+  
   const watchedItems = useWatch({ control, name: "items" });
 
   const watchedInputs = useMemo(() => {
@@ -211,20 +225,20 @@ const RaisingEntryVendorSeaOut = ({ editData, setEditData }) => {
 
     const safeItems = safeArr(editData?.items)?.length
       ? editData.items.map((it) => ({
-          description: safeStr(it.description),
-          units: safeStr(it.units),
-          cur: safeStr(it.cur),
-          sac: safeStr(it.sac),
-          qty: safeNum(it.qty),
-          amount: safeNum(it.amount),
-          exRate: safeNum(it.exRate),
-          amountInInr: safeNum(it.amountInInr),
-          gstPer: safeNum(it.gstPer),
-          cgst: safeNum(it.cgst),
-          sgst: safeNum(it.sgst),
-          igst: safeNum(it.igst),
-          total: safeNum(it.total),
-        }))
+        description: safeStr(it.description),
+        units: safeStr(it.units),
+        cur: safeStr(it.cur),
+        sac: safeStr(it.sac),
+        qty: safeNum(it.qty),
+        amount: safeNum(it.amount),
+        exRate: safeNum(it.exRate),
+        amountInInr: safeNum(it.amountInInr),
+        gstPer: safeNum(it.gstPer),
+        cgst: safeNum(it.cgst),
+        sgst: safeNum(it.sgst),
+        igst: safeNum(it.igst),
+        total: safeNum(it.total),
+      }))
       : [sampleRow()];
 
     reset({
@@ -238,6 +252,8 @@ const RaisingEntryVendorSeaOut = ({ editData, setEditData }) => {
         : "",
       items: safeItems,
     });
+    // Call refreshKeyboard after form values are populated
+    refreshKeyboard();
   }, [isEditing]);
 
   // ---------------------------------------------
@@ -263,7 +279,7 @@ const RaisingEntryVendorSeaOut = ({ editData, setEditData }) => {
 
     onSuccess: () => {
       queryClient.invalidateQueries(["oceanOutboundVendor"]);
-      alert("Vendor Accounting Entry Created Successfully");
+      notifySuccess("Vendor Accounting Entry Created Successfully");
 
       reset(defaultValues);
       setEditData(null);
@@ -308,7 +324,7 @@ const RaisingEntryVendorSeaOut = ({ editData, setEditData }) => {
 
     onSuccess: () => {
       queryClient.invalidateQueries(["oceanOutboundVendor"]);
-      alert("Vendor Accounting Entry Updated Successfully");
+      notifySuccess("Vendor Accounting Entry Updated Successfully");
 
       reset(defaultValues);
       setEditData(null);
@@ -391,7 +407,7 @@ const RaisingEntryVendorSeaOut = ({ editData, setEditData }) => {
         const b = document.querySelector(".modal-backdrop");
         if (b) b.remove();
       }
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // ---------------------------------------------
@@ -966,7 +982,7 @@ const RaisingEntryVendorSeaOut = ({ editData, setEditData }) => {
 
             </form>
 
-            
+
           </div>
 
         </div>

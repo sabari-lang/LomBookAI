@@ -6,7 +6,10 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import PdfPreviewModal from "../../common/popup/PdfPreviewModal";
 
+
 const SalePurchaseReportByItem = () => {
+    // Report filter form - always unlock on mount
+    
     const { control } = useForm({
         defaultValues: {
             partyName: "",

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { Search, Trash } from "react-bootstrap-icons";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -6,7 +6,10 @@ import { createOceanOutboundHouse, updateOceanOutboundHouse } from "../../oceanO
 import { CONTAINER_SIZE_LIST, UNIT_PKG_LIST } from "../../../../../../utils/unitPkgList";
 import NewWindow from "react-new-window";
 import CustomerSearch from "../../../../../common/popup/CustomerSearch";
-import { useUnlockInputs } from "../../../../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../../../../utils/refreshKeyboard";
+import { SHIPMENT_CATEGORY } from "../../../../../../constants/shipment";
+import { DEFAULT_SHIPPER } from "../../../../../../utils/defaultPartyInfo";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../utils/notifications";
 
 
 
@@ -19,11 +22,12 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
     const storedData = storedRaw ? JSON.parse(storedRaw) : null;
 
     const jobNo = storedData?.jobNo;  // ⭐ CORRECT PLACE
-    console.log("ed", editData)
+    // console.log("ed", editData)
 
     // Customer Search State
     const [open, setOpen] = useState(false);
     const [searchTarget, setSearchTarget] = useState(null);
+    const lastAutoFillRef = useRef({ pkg: "", wgt: "" });
 
     // Helper function to format date for input[type="date"]
     const formatDateForInput = (dateValue) => {
@@ -51,16 +55,23 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
         branch: storedData?.branch ?? "HEAD OFFICE",
 
         // LEFT stacked blocks - Auto-filled from job/master
-        shipperName: storedData?.shipperName ?? "",
-        shipperAddress: storedData?.shipperAddress ?? "",
-        consigneeName: storedData?.consigneeName ?? "",
-        consigneeAddress: storedData?.consigneeAddress ?? "",
-        notifyName: storedData?.notifyName ?? "",
-        notifyAddress: storedData?.notifyAddress ?? "",
+        // shipperName: storedData?.shipperName ?? "",
+        // shipperAddress: storedData?.shipperAddress ?? "",
+        // consigneeName: storedData?.consigneeName ?? "",
+        // consigneeAddress: storedData?.consigneeAddress ?? "",
+        // notifyName: storedData?.notifyName ?? "",
+        // notifyAddress: storedData?.notifyAddress ?? "",
+        shipperName: "",
+        shipperAddress: "",
+        consigneeName: "",
+        consigneeAddress: "",
+        notifyName: "",
+        notifyAddress: "",
+        agentAddress: storedData?.agentAddress ?? "",
 
         // dates & terms (left) - Auto-filled from job/master
-        onBoardDate: formatDateForInput(storedData?.onBoardDate),
-        arrivalDate: formatDateForInput(storedData?.arrivalDate),
+        onBoardDate: formatDateForInput(storedData?.onBoardDate) || null,
+        arrivalDate: formatDateForInput(storedData?.arrivalDate) || null,
         precarriageBy: storedData?.precarriageBy ?? "N.A",
         portDischarge: storedData?.portDischarge ?? "",
         freightTerm: storedData?.freightTerm ?? "",
@@ -81,17 +92,17 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
         callSign: storedData?.callSign ?? "",
 
         // package/weight/measurement - Auto-filled from job/master
-        package: storedData?.package ?? "",
+        package: storedData?.package ?? null,
         unitPkg: storedData?.unitPkg ?? "BALES",
-        grossWeight: storedData?.grossWeight ?? "",
+        grossWeight: storedData?.grossWeight ?? null,
         unitWeight: storedData?.unitWeight ?? "Kgs",
-        measurement: storedData?.measurement ?? "",
+        measurement: storedData?.measurement ?? null,
         unitCbm: storedData?.unitCbm ?? "CBM",
 
         // HBL specific invoice fields
         shipperInvoiceNo: "",
-        shipperInvoiceDate: "",
-        shipperInvoiceAmount: "",
+        shipperInvoiceDate: null,
+        shipperInvoiceAmount: null,
 
         // Containers dynamic - Auto-filled from job/master containers array
         containers: Array.isArray(storedData?.containers) && storedData.containers.length > 0
@@ -99,16 +110,16 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
                 containerNo: cont?.containerNo ?? "",
                 size: cont?.size ?? "20 HC",
                 term: cont?.term ?? "CFS/CFS",
-                wgt: cont?.wgt ?? "",
-                pkg: cont?.pkg ?? "",
+                wgt: cont?.wgt ?? null,
+                pkg: cont?.pkg ?? null,
                 sealNo: cont?.sealNo ?? "",
             }))
             : [{
                 containerNo: "",
                 size: "20 HC",
                 term: "CFS/CFS",
-                wgt: "",
-                pkg: "",
+                wgt: null,
+                pkg: null,
                 sealNo: "",
             }],
 
@@ -117,9 +128,10 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
         descShort: storedData?.descShort ?? '"SAID TO CONTAIN"',
         descLong: storedData?.descLong ?? "",
         freightPayable: storedData?.freightPayable ?? "",
-        originalBL: storedData?.originalBL ?? "",
+        originalBL: storedData?.originalBL ?? null,
         place: storedData?.place ?? "",
-        dateOfIssue: formatDateForInput(storedData?.dateOfIssue),
+        dateOfIssue: formatDateForInput(storedData?.dateOfIssue) || null,
+        notes: storedData?.notes ?? "",
     }
     const {
         control,
@@ -135,11 +147,51 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
 
     const { fields, append, remove } = useFieldArray({ control, name: "containers" });
 
+    // Auto-fill Package and Gross Weight into first container row
+    const packageValue = watch("package");
+    const grossWeightValue = watch("grossWeight");
+    useEffect(() => {
+      const containers = getValues("containers");
+      if (!containers || containers.length === 0) {
+        // Initialize containers array if empty
+        setValue("containers", [{ containerNo: "", size: "20 HC", term: "CFS/CFS", wgt: "", pkg: "", sealNo: "" }]);
+        return;
+      }
+
+      const firstContainer = containers[0];
+      if (!firstContainer) return;
+
+      // Get current container values (handle null/undefined)
+      const currentPkg = firstContainer.pkg ?? "";
+      const currentWgt = firstContainer.wgt ?? "";
+      
+      // Convert package/grossWeight to strings for comparison
+      const packageStr = packageValue != null ? String(packageValue) : "";
+      const weightStr = grossWeightValue != null ? String(grossWeightValue) : "";
+
+      // Auto-fill package if container is empty or matches last auto-filled value
+      if (packageStr && (currentPkg === "" || currentPkg === lastAutoFillRef.current.pkg)) {
+        setValue("containers.0.pkg", packageStr);
+        lastAutoFillRef.current.pkg = packageStr;
+      } else if (!packageStr && currentPkg === lastAutoFillRef.current.pkg) {
+        // Clear if source is cleared and it matches last auto-fill
+        setValue("containers.0.pkg", "");
+        lastAutoFillRef.current.pkg = "";
+      }
+
+      // Auto-fill weight if container is empty or matches last auto-filled value
+      if (weightStr && (currentWgt === "" || currentWgt === lastAutoFillRef.current.wgt)) {
+        setValue("containers.0.wgt", weightStr);
+        lastAutoFillRef.current.wgt = weightStr;
+      } else if (!weightStr && currentWgt === lastAutoFillRef.current.wgt) {
+        // Clear if source is cleared and it matches last auto-fill
+        setValue("containers.0.wgt", "");
+        lastAutoFillRef.current.wgt = "";
+      }
+    }, [packageValue, grossWeightValue, setValue, getValues]);
+
     const isEditing = Boolean(editData?.id);
     const queryClient = useQueryClient();
-
-    // ✅ Keyboard unlock hook for edit mode
-    useUnlockInputs(isEditing);
 
     // ⭐ Auto-fill from sessionStorage on mount (only when NOT editing)
     useEffect(() => {
@@ -165,7 +217,31 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
             ...initialValues, // BASE DEFAULTS
             ...editData,        // OVERRIDE WITH API DATA
         });
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
     }, [editData?.id]);
+
+
+
+    // Auto-update freightTerm based on shipment
+    const shipment = watch("shipment");
+    useEffect(() => {
+        if (!shipment) {
+            setValue("freightTerm", "");
+            return;
+        }
+
+        const isPrepaid = SHIPMENT_CATEGORY.PREPAID.includes(shipment);
+        const isCollect = SHIPMENT_CATEGORY.COLLECT.includes(shipment);
+
+        if (isPrepaid) {
+            setValue("freightTerm", "FREIGHT PREPAID");
+        } else if (isCollect) {
+            setValue("freightTerm", "FREIGHT COLLECT");
+        } else {
+            setValue("freightTerm", "");
+        }
+    }, [shipment, setValue]);
 
     const handleSameAsConsignee = (checked) => {
         if (checked) {
@@ -215,7 +291,7 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
 
         onSuccess: () => {
             queryClient.invalidateQueries(["oceanOutboundHouseList", jobNo]);
-            alert("Ocean Outbound House Created Successfully");
+            notifySuccess("Ocean Outbound House Created Successfully");
             closeModal();
         },
 
@@ -225,7 +301,7 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
                 error?.response?.data?.error ||
                 error?.message ||
                 "Something went wrong";
-            alert(`Error: ${msg}`);
+            notifyError(`Error: ${msg}`);
         }
     });
 
@@ -237,7 +313,7 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
 
         onSuccess: () => {
             queryClient.invalidateQueries(["oceanOutboundHouseList", jobNo]);
-            alert("Ocean Outbound House Updated Successfully");
+            notifySuccess("Ocean Outbound House Updated Successfully");
             closeModal();
         },
 
@@ -247,7 +323,7 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
                 error?.response?.data?.error ||
                 error?.message ||
                 "Something went wrong";
-            alert(`Error: ${msg}`);
+            notifyError(`Error: ${msg}`);
         }
     });
 
@@ -257,11 +333,26 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
         const data = {
             ...form,
             consol: form?.consol === "Consol",
+
+            // date fields -> null if empty
+            onBoardDate: form.onBoardDate || null,
+            arrivalDate: form.arrivalDate || null,
+            dateOfIssue: form.dateOfIssue || null,
+            shipperInvoiceDate: form.shipperInvoiceDate || null,
+
+            // numeric fields
             package: form.package ? Number(form.package) : null,
             grossWeight: form.grossWeight ? Number(form.grossWeight) : null,
             measurement: form.measurement ? Number(form.measurement) : null,
             originalBL: form.originalBL ? Number(form.originalBL) : null,
-            asArranged: form.asArranged ? 1 : 0,
+            shipperInvoiceAmount: form.shipperInvoiceAmount ? Number(form.shipperInvoiceAmount) : null,
+
+            // containers numeric fields
+            containers: form.containers.map(c => ({
+                ...c,
+                wgt: c.wgt ? Number(c.wgt) : null,
+                pkg: c.pkg ? Number(c.pkg) : null,
+            })),
         };
 
         if (isEditing) {
@@ -491,7 +582,7 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
 
                                                 <div className="col-md-4">
                                                     <label className="fw-bold">Freight Term</label>
-                                                    <Controller name="freightTerm" control={control} render={({ field }) => <input className="form-control" {...field} />} />
+                                                    <Controller name="freightTerm" control={control} render={({ field }) => <input className="form-control" {...field} readOnly />} />
                                                 </div>
 
                                                 <div className="col-md-4">
@@ -593,7 +684,7 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
                                             <div className="row g-2 align-items-end">
                                                 <div className="col-md-3">
                                                     <label className="fw-bold">Package</label>
-                                                    <Controller name="package" control={control} render={({ field }) => <input className="form-control" {...field} />} />
+                                                    <Controller name="package" control={control} render={({ field }) => <input className="form-control" {...field} value={field.value ?? ""} />} />
                                                 </div>
 
                                                 <div className="col-md-3">
@@ -616,7 +707,7 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
 
                                                 <div className="col-md-3">
                                                     <label className="fw-bold">Gross Weight</label>
-                                                    <Controller name="grossWeight" control={control} render={({ field }) => <input className="form-control" {...field} />} />
+                                                    <Controller name="grossWeight" control={control} render={({ field }) => <input className="form-control" {...field} value={field.value ?? ""} />} />
                                                 </div>
 
                                                 <div className="col-md-3">
@@ -712,7 +803,7 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
                                                             name={`containers.${i}.wgt`}
                                                             control={control}
                                                             render={({ field }) => (
-                                                                <input className="form-control form-control-sm" {...field} />
+                                                                <input className="form-control form-control-sm" {...field} value={field.value ?? ""} />
                                                             )}
                                                         />
                                                     </td>
@@ -723,7 +814,7 @@ const CreateHouseSeaOutbound = ({ editData, setEditData }) => {
                                                             name={`containers.${i}.pkg`}
                                                             control={control}
                                                             render={({ field }) => (
-                                                                <input className="form-control form-control-sm" {...field} />
+                                                                <input className="form-control form-control-sm" {...field} value={field.value ?? ""} />
                                                             )}
                                                         />
                                                     </td>

@@ -1,10 +1,12 @@
 import React, { useEffect } from "react";
 import { useForm, Controller, useFieldArray } from "react-hook-form";
 import { Search, X } from "react-bootstrap-icons";
+import { refreshKeyboard } from "../../../../../../utils/refreshKeyboard";
+
 const CreateMasterAirway = ({ editData }) => {
+    const isEditing = Boolean(editData?.id || editData?._id);
 
-
-
+    
     const { control, handleSubmit, reset } = useForm({
         defaultValues: {
             jobNo: "",
@@ -76,6 +78,8 @@ const CreateMasterAirway = ({ editData }) => {
     const storedRaw = sessionStorage.getItem("masterAirwayData");
     const storedData = storedRaw ? JSON.parse(storedRaw) : null;
 
+    console.log("storedData", storedData)
+
     useEffect(() => {
         if (!storedData) return;
 
@@ -83,6 +87,8 @@ const CreateMasterAirway = ({ editData }) => {
         const fixedData = { ...storedData };
 
         reset(fixedData);
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
 
     }, []);   // 👈 EMPTY DEPENDENCY ARRAY (run once)
 

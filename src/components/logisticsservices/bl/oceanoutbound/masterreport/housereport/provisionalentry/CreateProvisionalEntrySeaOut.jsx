@@ -7,7 +7,11 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import moment from "moment";
 import NewWindow from "react-new-window";
 import CustomerSearch from "../../../../../../common/popup/CustomerSearch";
+import ItemSearch from "../../../../../../common/popup/ItemSearch";
 import { createOceanOutboundProvisional, updateOceanOutboundProvisional } from "../../../oceanOutboundApi";
+import { refreshKeyboard } from "../../../../../../../utils/refreshKeyboard";
+import { useAppBack } from "../../../../../../../hooks/useAppBack";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../../utils/notifications";
 
 
 
@@ -27,10 +31,12 @@ const exchangeRates = {
 };
 
 const CreateProvisionalEntrySeaOut = () => {
-    const navigate = useNavigate();
+    const { goBack } = useAppBack();
     const queryClient = useQueryClient();
     const { state } = useLocation();
     const [open, setOpen] = useState(false);
+    const [itemPopupOpen, setItemPopupOpen] = useState(false);
+    const [activeItemRowIndex, setActiveItemRowIndex] = useState(null);
     const isEditing = Boolean(state?.id);
 
     const storedMaster = JSON.parse(sessionStorage.getItem("masterAirwayData") || "{}");
@@ -108,6 +114,8 @@ const CreateProvisionalEntrySeaOut = () => {
                 total: safeNum(it?.total),
             })),
         });
+        // Call refreshKeyboard after form values are populated
+        refreshKeyboard();
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isEditing]);
@@ -240,7 +248,7 @@ const CreateProvisionalEntrySeaOut = () => {
             message = error?.message || "Unknown error.";
         }
 
-        alert(message);
+        notifyError(message);
     };
 
     /** ---------------------------
@@ -250,8 +258,8 @@ const CreateProvisionalEntrySeaOut = () => {
         mutationFn: (payload) => createOceanOutboundProvisional(jobNo, hblNo, payload),
         onSuccess: () => {
             queryClient.invalidateQueries(["oceanOutboundProvisionals", jobNo, hblNo]);
-            alert("Provisional created successfully");
-            navigate(-1);
+            notifySuccess("Provisional created successfully");
+            goBack();
         },
         onError: (err) => handleError(err, "Create"),
     });
@@ -260,8 +268,8 @@ const CreateProvisionalEntrySeaOut = () => {
         mutationFn: (payload) => updateOceanOutboundProvisional(jobNo, hblNo, payload),
         onSuccess: () => {
             queryClient.invalidateQueries(["oceanOutboundProvisionals", jobNo, hblNo]);
-            alert("Provisional updated successfully");
-            navigate(-1);
+            notifySuccess("Provisional updated successfully");
+            goBack();
         },
         onError: (err) => handleError(err, "Update"),
     });
@@ -430,7 +438,15 @@ const CreateProvisionalEntrySeaOut = () => {
                                             render={({ field }) => <input {...field} className="form-control form-control-sm" />} />
                                     </td>
 
-                                    <td className="text-center"><FaSearch /></td>
+                                    <td className="text-center">
+                                        <FaSearch 
+                                            style={{ cursor: "pointer" }} 
+                                            onClick={() => {
+                                                setActiveItemRowIndex(index);
+                                                setItemPopupOpen(true);
+                                            }}
+                                        />
+                                    </td>
 
                                     <td>
                                         <Controller name={`items.${index}.units`} control={control}
@@ -550,6 +566,28 @@ const CreateProvisionalEntrySeaOut = () => {
                             setValue("country", country);
 
                             setOpen(false);
+                        }}
+                    />
+                </NewWindow>
+            )}
+
+            {itemPopupOpen && activeItemRowIndex !== null && (
+                <NewWindow
+                    onUnload={() => {
+                        setItemPopupOpen(false);
+                        setActiveItemRowIndex(null);
+                    }}
+                    title="Search Item"
+                    features="width=1100,height=700,scrollbars=yes,resizable=yes"
+                >
+                    <ItemSearch
+                        onSelect={(item) => {
+                            if (activeItemRowIndex !== null) {
+                                setValue(`items.${activeItemRowIndex}.description`, item.name || "");
+                                setValue(`items.${activeItemRowIndex}.sac`, item.hsnCode || "");
+                            }
+                            setItemPopupOpen(false);
+                            setActiveItemRowIndex(null);
                         }}
                     />
                 </NewWindow>

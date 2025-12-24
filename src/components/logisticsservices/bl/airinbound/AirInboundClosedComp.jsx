@@ -9,6 +9,7 @@ import JobCreation from "./JobCreation";
 import Pagination from "../../../common/pagination/Pagination";
 import { extractItems } from "../../../../utils/extractItems";
 import { extractPagination } from "../../../../utils/extractPagination";
+import { confirm } from "../../../../utils/confirm";
 
 const AirInboundClosedComp = () => {
     const navigate = useNavigate();
@@ -29,10 +30,11 @@ const AirInboundClosedComp = () => {
         onSettled: () => setDeletingJobKey(null),
     });
 
-    const handleDelete = (row = {}) => {
+    const handleDelete = async (row = {}) => {
         const jobNo = row.jobNo;
         if (!jobNo) return;
-        if (!window.confirm(`Delete Air Inbound job ${jobNo}?`)) return;
+        const confirmed = await confirm(`Delete Air Inbound job ${jobNo}?`);
+    if (!confirmed) return;
         setDeletingJobKey(jobNo);
         deleteMutation.mutate(jobNo);
     };

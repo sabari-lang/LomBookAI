@@ -16,6 +16,8 @@ import { extractItems } from "../../../utils/extractItems"; // same as ViewCusto
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 const ViewQuote = () => {
   const navigate = useNavigate();
@@ -71,11 +73,11 @@ const ViewQuote = () => {
   const handleDelete = async () => {
     try {
       if (!selectedIds || selectedIds.length === 0) {
-        alert("Please select at least one quote to delete.");
+        notifyInfo("Please select at least one quote to delete.");
         return;
       }
-      if (!window.confirm("Are you sure you want to delete selected quotes?"))
-        return;
+      const confirmed = await confirm("Are you sure you want to delete selected quotes?");
+    if (!confirmed) return;
 
       const validIds = selectedIds.filter(id => Boolean(id));
       if (validIds.length === 0) {
@@ -92,7 +94,7 @@ const ViewQuote = () => {
 
       await Promise.all(deletePromises);
       setSelectedIds([]);
-      alert("Quote(s) deleted successfully");
+      notifySuccess("Quote(s) deleted successfully");
     } catch (error) {
       console.error("Failed to delete quotes:", error);
       handleProvisionalError(error, "Delete Quote");
@@ -182,7 +184,7 @@ const ViewQuote = () => {
   const exportExcel = () => {
     try {
       if (!Array.isArray(filteredQuotes) || filteredQuotes.length === 0) {
-        alert("No quotes to export.");
+        notifyInfo("No quotes to export.");
         return;
       }
 
@@ -215,7 +217,7 @@ const ViewQuote = () => {
   const generatePDF = async () => {
     try {
       if (!Array.isArray(filteredQuotes) || filteredQuotes.length === 0) {
-        alert("No quotes to generate PDF.");
+        notifyInfo("No quotes to generate PDF.");
         return;
       }
 
@@ -324,7 +326,7 @@ const ViewQuote = () => {
       if (action === "open") {
         const newWindow = window.open(pdfUrl);
         if (!newWindow) {
-          alert("Please disable your popup blocker to open PDF.");
+          notifyInfo("Please disable your popup blocker to open PDF.");
         }
       }
       if (action === "save") {
@@ -339,7 +341,7 @@ const ViewQuote = () => {
       if (action === "print") {
         const w = window.open(pdfUrl);
         if (!w) {
-          alert("Please disable your popup blocker to print PDF.");
+          notifyInfo("Please disable your popup blocker to print PDF.");
         } else {
           w.onload = () => {
             if (typeof w.print === "function") {

@@ -9,7 +9,8 @@ import { getItems } from "../../items/api";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { extractItems } from "../../../utils/extractItems";
 import { calculateLineAmount, calculateSubtotal, calculateTaxAmount, calculateGrandTotal, toNumber } from "../../../utils/calculations";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 // --------------------------------------------------
 // NEW CREDIT NOTES (FULL PRODUCTION VERSION)
@@ -22,9 +23,6 @@ const NewCreditNotes = () => {
   const editId = state?.id || null;
   const isNewFromInvoice = state?.isNew === true;
   const isEditing = Boolean(editId) && !isNewFromInvoice;
-
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
 
   // DEFAULT VALUES
   const DEFAULTS = {
@@ -120,6 +118,8 @@ const NewCreditNotes = () => {
 
       setUploadedFiles(state.attachments || []);
       setValue("attachments", state.attachments || []);
+      // Call refreshKeyboard after form values are populated
+      refreshKeyboard();
       return;
     }
 
@@ -194,7 +194,7 @@ const NewCreditNotes = () => {
     mutationFn: (payload) => createCreditNote(payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["creditNotes"]);
-      alert("Credit Note created successfully!");
+      notifySuccess("Credit Note created successfully!");
       navigate("/creditnotes");
     },
     onError: (err) => handleProvisionalError(err, "Create Credit Note"),
@@ -204,7 +204,7 @@ const NewCreditNotes = () => {
     mutationFn: ({ id, payload }) => updateCreditNote(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["creditNotes"]);
-      alert("Credit Note updated successfully!");
+      notifySuccess("Credit Note updated successfully!");
       navigate("/creditnotes");
     },
     onError: (err) => handleProvisionalError(err, "Update Credit Note"),

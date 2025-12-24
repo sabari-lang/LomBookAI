@@ -10,14 +10,12 @@ import { getAirInboundHouses, deleteAirInboundHouse, updateAirInboundHouseStatus
 import { handleProvisionalError } from "../../../../../../utils/handleProvisionalError";
 import CreateMasterAirway from "../masterairwaybill/CreateMasterAirway";
 
-
-
-
-
 // ⭐ Reusable Pagination Extractor
 import Pagination from "../../../../../common/pagination/Pagination";
 import { extractPagination } from "../../../../../../utils/extractPagination";
 import { extractItems } from "../../../../../../utils/extractItems";
+import { notifySuccess, notifyError, notifyInfo } from "../../../../../../utils/notifications";
+import { confirm } from "../../../../../../utils/confirm";
 
 const HouseAirwaybill = () => {
     const navigate = useNavigate();
@@ -35,6 +33,8 @@ const HouseAirwaybill = () => {
     const storedData = JSON.parse(sessionStorage.getItem("masterAirwayData"));
     const jobNo = storedData?.jobNo;
 
+    console.log("storedData", storedData)
+
     // ⭐ API CALL WITH backend pagination
     const { data: apiRaw, isLoading, isError } = useQuery({
         queryKey: ["airInboundHouseList", jobNo, currentPage, entriesPerPage],
@@ -47,6 +47,7 @@ const HouseAirwaybill = () => {
         keepPreviousData: true,
     });
 
+    console.log("apiRaw", apiRaw)
     // Delete mutation
     const deleteMutation = useMutation({
         mutationFn: ({ jobNo, hawb }) => deleteAirInboundHouse(jobNo, hawb),
@@ -55,13 +56,14 @@ const HouseAirwaybill = () => {
         },
     });
 
-    const handleDelete = (row) => {
+    const handleDelete = async (row) => {
         const hawb = row.hawb ?? row.hawbNo ?? row.houseNumber;
         if (!hawb) {
-            alert("House number not found");
+            notifyError("House number not found");
             return;
         }
-        if (window.confirm(`Are you sure you want to delete house ${hawb}?`)) {
+        const confirmed = await confirm(`Are you sure you want to delete house ${hawb}?`);
+        if (confirmed) {
             deleteMutation.mutate({ jobNo, hawb });
         }
     };
@@ -72,7 +74,7 @@ const HouseAirwaybill = () => {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["airInboundHouseList", jobNo] });
             setEditData(null);
-            alert("Status updated successfully!");
+            notifySuccess("Status updated successfully!");
             // Close modal
             const modalElement = document.getElementById("airinboundHouseStatusUpdateModal");
             if (modalElement) {
@@ -87,7 +89,7 @@ const HouseAirwaybill = () => {
         if (!editData) return;
         const hawb = editData.hawb ?? editData.hawbNo ?? editData.houseNumber;
         if (!hawb) {
-            alert("House number not found");
+            notifyError("House number not found");
             return;
         }
         statusUpdateMutation.mutate({ jobNo, hawb, payload: formData });
@@ -302,8 +304,8 @@ const HouseAirwaybill = () => {
             </div>
 
             <CreateHouse editData={editData} setEditData={setEditData} />
-            <HouseStatusUpdate 
-                editData={editData} 
+            <HouseStatusUpdate
+                editData={editData}
                 setEditData={setEditData}
                 onSubmitStatus={handleStatusUpdate}
                 isLoading={statusUpdateMutation.isPending}

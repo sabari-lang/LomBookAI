@@ -5,14 +5,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CONTAINER_SIZE_LIST, UNIT_PKG_LIST } from '../../../../../../utils/unitPkgList';
 
 
+
 const CreateHouseBillOfLadding = () => {
+    // Create-only form - always unlock on mount
+    
 
 
     const storedRaw = sessionStorage.getItem("houseAirwayData");
     const storedData = storedRaw ? JSON.parse(storedRaw) : null;
 
     const jobNo = storedData?.jobNo;  // ⭐ CORRECT PLACE
-    console.log("ed", storedData)
+
 
     const initialValues = {
         // TOP / header / basic
@@ -101,6 +104,18 @@ const CreateHouseBillOfLadding = () => {
     const isEditing = Boolean(storedData?.id);
     const queryClient = useQueryClient();
 
+    // Helper function to format date for input[type="date"]
+    const formatDateForInput = (dateValue) => {
+        if (!dateValue) return "";
+        try {
+            const date = new Date(dateValue);
+            if (isNaN(date.getTime())) return "";
+            return date.toISOString().split('T')[0];
+        } catch {
+            return "";
+        }
+    };
+
     // Edit Form Data
     useEffect(() => {
         if (!storedData) return;
@@ -108,7 +123,13 @@ const CreateHouseBillOfLadding = () => {
         reset({
             ...initialValues, // BASE DEFAULTS
             ...storedData,        // OVERRIDE WITH API DATA
+            onBoardDate: formatDateForInput(storedData?.onBoardDate) || null,
+            arrivalDate: formatDateForInput(storedData?.arrivalDate) || null,
+            dateOfIssue: formatDateForInput(storedData?.dateOfIssue) || null,
+            shipperInvoiceDate: formatDateForInput(storedData?.shipperInvoiceDate) || null,
         });
+
+
     }, [reset]);
 
     const addContainer = () =>
@@ -122,7 +143,7 @@ const CreateHouseBillOfLadding = () => {
         <>
 
 
-            <form onSubmit={handleSubmit(onSubmit)}>
+            <form onSubmit={handleSubmit(onSubmit)} className='p-4'>
 
                 <fieldset disabled>
                     {/* TOP: ONE ROW split into two col-6 sections */}
@@ -312,7 +333,19 @@ const CreateHouseBillOfLadding = () => {
 
                                     <div className="col-md-4">
                                         <label className="fw-bold">Shipping Term</label>
-                                        <Controller name="shippingTerm" control={control} render={({ field }) => <select className="form-select" {...field}><option value="">--Select--</option><option>FCL/FCL</option><option>CIF</option></select>} />
+                                        <Controller
+                                            name="shippingTerm"
+                                            control={control}
+                                            render={({ field }) => (
+                                                <select className="form-select" {...field}>
+                                                    <option value="">--Select--</option>
+                                                    <option value="LCL/LCL">LCL/LCL</option>
+                                                    <option value="FCL/FCL">FCL/FCL</option>
+                                                    <option value="FCL/LCL">FCL/LCL</option>
+                                                </select>
+                                            )}
+                                        />
+
                                     </div>
                                 </div>
 

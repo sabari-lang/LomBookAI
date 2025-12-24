@@ -11,6 +11,8 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import EmptyStateMessage from "../../common/emptytable/EmptyStateMessage";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+import { confirm } from "../../../utils/confirm";
 
 const RecurringBills = () => {
   const navigate = useNavigate();
@@ -91,8 +93,9 @@ const RecurringBills = () => {
   }, [filteredRecurringBills]);
 
   const handleDelete = async () => {
-    if (!selectedIds.length) return alert("Select recurring bills to delete");
-    if (!window.confirm("Are you sure you want to delete?")) return;
+    if (!selectedIds.length) return notifyInfo("Select recurring bills to delete");
+    const confirmed = await confirm("Are you sure you want to delete?");
+    if (!confirmed) return;
 
     await Promise.all(selectedIds.map((id) => deleteMutation.mutateAsync(id)));
     setSelectedIds([]);

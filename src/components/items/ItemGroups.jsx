@@ -9,6 +9,8 @@ import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
 import EmptyStateMessage from "../common/emptytable/EmptyStateMessage";
 import PdfPreviewModal from "../common/popup/PdfPreviewModal";
+import { notifySuccess, notifyError, notifyInfo } from "../../utils/notifications";
+import { confirm } from "../../utils/confirm";
 
 const ItemGroups = () => {
     const navigate = useNavigate();
@@ -118,13 +120,14 @@ const ItemGroups = () => {
     };
 
     // ✅ Delete Selected Rows
-    const handleDelete = () => {
+    const handleDelete = async () => {
         if (selectedRows.length === 0) {
-            alert("Please select at least one group to delete.");
+            notifyInfo("Please select at least one group to delete.");
             return;
         }
 
-        if (window.confirm(`Delete ${selectedRows.length} selected item group(s)?`)) {
+        const confirmed = await confirm(`Delete ${selectedRows.length} selected item group(s)?`);
+        if (confirmed) {
             const ids = selectedRows.map((row) => row.id);
             setItemGroups((prev) => prev.filter((g) => !ids.includes(g.id)));
         }

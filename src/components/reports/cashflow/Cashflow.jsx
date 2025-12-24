@@ -11,48 +11,12 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
+
 
 const Cashflow = () => {
-    // Mock Data
-    const mockData = useMemo(
-        () => [
-            {
-                id: 1,
-                date: "2025-10-30",
-                refNo: "1",
-                name: "Ranjith",
-                category: "Sales",
-                type: "Sale",
-                cashIn: 22420,
-                cashOut: 0,
-                runningBalance: 22420,
-            },
-            {
-                id: 2,
-                date: "2025-10-30",
-                refNo: "2",
-                name: "Ranjith",
-                category: "Sales",
-                type: "Sale Order",
-                cashIn: 23600,
-                cashOut: 0,
-                runningBalance: 46020,
-            },
-            {
-                id: 3,
-                date: "2025-10-31",
-                refNo: "3",
-                name: "Suresh",
-                category: "Purchase",
-                type: "Payment-Out",
-                cashIn: 0,
-                cashOut: 12000,
-                runningBalance: 34020,
-            },
-        ],
-        []
-    );
-
+    // Report filter form - always unlock on mount
+    
     const [filters, setFilters] = useState({
         startDate: "",
         endDate: "",
@@ -80,7 +44,7 @@ const Cashflow = () => {
     });
     const apiRows = extractItems(fetched);
     const pagination = extractPagination(fetched);
-    const tableRows = apiRows.length > 0 ? apiRows : mockData;
+    const tableRows = apiRows;
     const filteredRows = useMemo(() => {
         let filtered = tableRows;
         const text = filters.search.trim().toLowerCase();
@@ -201,7 +165,7 @@ const Cashflow = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to generate PDF");
+            notifyError("Failed to generate PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);

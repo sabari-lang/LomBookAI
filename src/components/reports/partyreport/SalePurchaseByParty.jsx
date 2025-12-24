@@ -12,14 +12,12 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
 
-
-const fallbackRows = [
-    { id: 1, partyName: "Ranjith", saleAmount: 0, purchaseAmount: 17700 },
-    { id: 2, partyName: "Arun Traders", saleAmount: 12000, purchaseAmount: 8000 },
-    { id: 3, partyName: "Vishal Enterprises", saleAmount: 5400, purchaseAmount: 0 },
-];
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const SalePurchaseByParty = () => {
+    // Report filter form - always unlock on mount
+    
+    
     const today = new Date();
     const defaultToDate = today.toISOString().slice(0, 10);
     const defaultFromDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -74,7 +72,7 @@ const SalePurchaseByParty = () => {
 
     const apiRows = extractItems(fetched);
     const pagination = extractPagination(fetched);
-    const tableRows = apiRows.length > 0 ? apiRows : fallbackRows;
+    const tableRows = apiRows;
     const totalRows = Number.isFinite(pagination.totalCount) ? pagination.totalCount : tableRows.length;
 
     const filteredRows = useMemo(() => {
@@ -175,7 +173,7 @@ const SalePurchaseByParty = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to generate PDF");
+            notifyError("Failed to generate PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);
@@ -195,7 +193,7 @@ const SalePurchaseByParty = () => {
             link.download = `SalePurchaseByParty_${fromDate}_${toDate}.pdf`;
             link.click();
         }
-        if (action === "email") alert("Email feature coming soon");
+        if (action === "email") notifyInfo("Email feature coming soon");
     };
 
     const columns = [

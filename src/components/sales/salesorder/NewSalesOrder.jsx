@@ -8,8 +8,8 @@ import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 import { extractItems } from "../../../utils/extractItems";
 import moment from "moment/moment";
 import { calculateLineAmount, calculateSubtotal, calculateTaxAmount, calculateGrandTotal, toNumber } from "../../../utils/calculations";
-import { useUnlockInputs } from "../../../hooks/useUnlockInputs";
-import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+import { refreshKeyboard } from "../../../utils/refreshKeyboard";
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const NewSalesOrder = () => {
   const { state } = useLocation();
@@ -52,14 +52,9 @@ const NewSalesOrder = () => {
     watch,
     reset,
     setValue,
-    getValues,
     handleSubmit,
     formState: { errors },
-  } = useForm({ 
-    defaultValues: DEFAULTS,
-    mode: "onBlur",
-    reValidateMode: "onChange",
-  });
+  } = useForm({ defaultValues: DEFAULTS });
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -69,9 +64,6 @@ const NewSalesOrder = () => {
   const editId = state?.id || null;
   const isNewFromQuote = state?.isNew === true; // 🔥 NEW: Flag from quote conversion
   const isEditing = Boolean(editId) && !isNewFromQuote; // 🔥 UPDATED: Don't edit if isNew flag is set
-
-  // ✅ Keyboard unlock hook for edit mode
-  useUnlockInputs(isEditing);
 
   const [uploadedFiles, setUploadedFiles] = useState([]);
 
@@ -102,6 +94,8 @@ const NewSalesOrder = () => {
 
       setUploadedFiles(state?.attachments || []);
       setValue("attachments", state?.attachments || []);
+      // Call refreshKeyboard after form values are populated
+      refreshKeyboard();
 
       return;
     }
@@ -114,8 +108,7 @@ const NewSalesOrder = () => {
 
     setUploadedFiles([]);
     setValue("attachments", []);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editId]);
+  }, [state, reset, setValue, isNewFromQuote]);
 
 
   // ---------------------------
@@ -170,27 +163,25 @@ const NewSalesOrder = () => {
   const itemOptions = extractItems(fetchedItemsRaw) || [];
 
   // ---------------------------
-  // LIVE WATCH FOR ITEMS (useWatch for stable updates) - debounced to prevent lag
+  // LIVE WATCH FOR ITEMS (useWatch for stable updates)
   // ---------------------------
-  const rawWatchedItems = useWatch({ control, name: "items" }) || [];
-  const watchedItems = useDebouncedValue(rawWatchedItems, 120);
+  const watchedItems = useWatch({ control, name: "items" }) || [];
 
   // ---------------------------
   // SHARED FULL LINE CALCULATION (Auto Updates UI + Summary)
   // ---------------------------
   // Use shared calculation utility - calculateLineAmount imported from utils/calculations
 
-  // Sync item amounts when items change - guarded to prevent unnecessary setValue
+  // Sync item amounts when items change
   useEffect(() => {
     watchedItems.forEach((item, index) => {
       const calculatedAmount = calculateLineAmount(item);
-      const currentAmount = getValues(`items.${index}.amount`);
-      const currentValue = toNumber(currentAmount, 0);
-      if (Math.abs(calculatedAmount - currentValue) > 0.01) {
+      const currentAmount = toNumber(item?.amount, 0);
+      if (Math.abs(calculatedAmount - currentAmount) > 0.01) {
         setValue(`items.${index}.amount`, calculatedAmount, { shouldDirty: false, shouldValidate: false });
       }
     });
-  }, [watchedItems, setValue, getValues]);
+  }, [watchedItems, setValue]);
 
   // ---------------------------
   // SUBTOTAL (LIVE) - Using shared utility
@@ -218,14 +209,10 @@ const NewSalesOrder = () => {
     return calculateGrandTotal(subTotal, taxAmount, adjustment);
   }, [subTotal, taxAmount, adjustment]);
 
-  // Sync calculated values to form state - guarded to prevent unnecessary setValue
+  // Sync calculated values to form state
   useEffect(() => {
-    const currentTotal = getValues("totalAmount");
-    const nearlyEqual = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
-    if (!nearlyEqual(currentTotal, finalTotal)) {
-      setValue("totalAmount", finalTotal, { shouldDirty: false });
-    }
-  }, [finalTotal, setValue, getValues]);
+    setValue("totalAmount", finalTotal, { shouldDirty: false });
+  }, [finalTotal, setValue]);
 
   // ---------------------------
   // FILE UPLOAD
@@ -257,8 +244,9 @@ const NewSalesOrder = () => {
     mutationFn: createSalesOrder,
     onSuccess: () => {
       queryClient.invalidateQueries(["salesOrders"]);
-      alert("Sales Order Created!");
+      notifySuccess("Sales Order Created!");
       reset(DEFAULTS);
+      refreshKeyboard();
       navigate("/salesorders");
     },
     onError: (error) => handleProvisionalError(error, "Create Sales Order"),
@@ -268,7 +256,8 @@ const NewSalesOrder = () => {
     mutationFn: ({ id, payload }) => updateSalesOrder(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries(["salesOrders"]);
-      alert("Sales Order Updated!");
+      notifySuccess("Sales Order Updated!");
+      refreshKeyboard();
       navigate("/salesorders");
     },
     onError: (error) => handleProvisionalError(error, "Update Sales Order"),

@@ -11,19 +11,12 @@ import { extractItems } from "../../../utils/extractItems";
 import { extractPagination } from "../../../utils/extractPagination";
 import { handleProvisionalError } from "../../../utils/handleProvisionalError";
 
-const fallbackRows = [
-    { id: 1, partyName: "kannan", email: "kannan@gmail.com", phone: "7010489432", receivable: 0, payable: 0 },
-    { id: 2, partyName: "Party 1", email: "abc1@xyz.com", phone: "1234567891", receivable: 200, payable: 0 },
-    { id: 3, partyName: "Party 2", email: "abc2@xyz.com", phone: "1234567892", receivable: 300, payable: 0 },
-    { id: 4, partyName: "Party 3", email: "abc3@xyz.com", phone: "1234567893", receivable: 40, payable: 0 },
-    { id: 5, partyName: "Party 4", email: "abc4@xyz.com", phone: "1234567894", receivable: 200, payable: 0 },
-    { id: 6, partyName: "Party 5", email: "abc5@xyz.com", phone: "1234567895", receivable: 300, payable: 0 },
-    { id: 7, partyName: "Party 6", email: "abc6@xyz.com", phone: "1234567896", receivable: 0, payable: 300 },
-    { id: 8, partyName: "Party 7", email: "abc7@xyz.com", phone: "1234567897", receivable: 200, payable: 0 },
-    { id: 9, partyName: "ranjith", email: "ranjith@gmail.com", phone: "7010489435", receivable: 0, payable: 17700 },
-];
+import { notifySuccess, notifyError, notifyInfo } from "../../../utils/notifications";
 
 const AllParties = () => {
+    // Report filter form - always unlock on mount
+    
+    
     const today = new Date();
     const defaultToDate = today.toISOString().slice(0, 10);
     const defaultFromDate = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
@@ -74,7 +67,7 @@ const AllParties = () => {
 
     const apiRows = extractItems(fetched);
     const pagination = extractPagination(fetched);
-    const tableRows = apiRows.length > 0 ? apiRows : fallbackRows;
+    const tableRows = apiRows;
     const totalRows = Number.isFinite(pagination.totalCount) ? pagination.totalCount : tableRows.length;
 
     const filteredRows = useMemo(() => {
@@ -192,7 +185,7 @@ const AllParties = () => {
             setShowPreview(true);
         } catch (err) {
             console.error(err);
-            alert("Failed to generate PDF");
+            notifyError("Failed to generate PDF");
         } finally {
             if (tempContainer.current) {
                 document.body.removeChild(tempContainer.current);
@@ -212,7 +205,7 @@ const AllParties = () => {
             link.download = `AllParties_${fromDate}_${toDate}.pdf`;
             link.click();
         }
-        if (action === "email") alert("Email feature coming soon");
+        if (action === "email") notifyInfo("Email feature coming soon");
     };
 
     const columns = [

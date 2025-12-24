@@ -1,0 +1,170 @@
+/**
+ * House Profit & Loss Report Styles
+ * Centralized stylesheet for all Job Costing reports
+ * Used by: Air Inbound, Air Outbound, Ocean Inbound, Ocean Outbound
+ * 
+ * This file defines the layout for both screen display and PDF generation.
+ * DO NOT modify individual module files - all styling changes should be made here.
+ */
+
+/* ============================================
+   PDF CONTAINER STYLES
+   ============================================ */
+.house-pl-pdf-container {
+    width: 210mm;
+    padding: 10mm;
+    font-family: Arial, sans-serif;
+    font-size: 9px;
+    line-height: 1.2;
+    background-color: #fff;
+    box-sizing: border-box;
+    margin: 0;
+}
+
+/* ============================================
+   BLOCK A: TITLE SECTION
+   ============================================ */
+.house-pl-title {
+    text-align: center;
+    margin-bottom: 8px;
+}
+
+.house-pl-title h2 {
+    margin: 0;
+    padding: 0;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+/* ============================================
+   BLOCK B: HEADER SECTION (Two-column box)
+   WITH BORDERS - as shown in screenshot
+   ============================================ */
+.house-pl-header {
+    width: 100%;
+    border: 1px solid #000;
+    border-collapse: collapse;
+    margin-bottom: 10px;
+}
+
+.house-pl-header td {
+    border: 1px solid #000;
+    padding: 2px 5px;
+    vertical-align: top;
+    font-size: 9px;
+}
+
+/* Label columns - bold */
+.house-pl-header td:nth-child(1),
+.house-pl-header td:nth-child(3) {
+    font-weight: bold;
+}
+
+/* ============================================
+   BLOCK C: INCOME & EXPENSE TABLES
+   NO BORDERS - clean text-only appearance
+   ============================================ */
+.house-pl-section {
+    margin-bottom: 10px;
+}
+
+.house-pl-section-title {
+    margin: 0 0 4px 0;
+    font-size: 10px;
+    font-weight: bold;
+    text-decoration: underline;
+}
+
+/* Clean table - NO borders at all */
+.hpl-clean-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: none;
+}
+
+.hpl-clean-table th,
+.hpl-clean-table td {
+    border: none;
+    padding: 2px 4px;
+    font-size: 9px;
+    vertical-align: top;
+}
+
+/* Header row - bold, no lines */
+.hpl-clean-table th {
+    font-weight: bold;
+    text-align: left;
+}
+
+/* Numeric columns right-aligned */
+.hpl-clean-table th.num,
+.hpl-clean-table td.num {
+    text-align: right;
+}
+
+/* Total row - bold, no separator line */
+.hpl-clean-table .total-row td {
+    font-weight: bold;
+    padding-top: 4px;
+}
+
+/* ============================================
+   BLOCK D: PROFIT SUMMARY TABLE
+   WITH BORDERS - as shown in screenshot
+   ============================================ */
+.house-pl-profit-section {
+    margin-top: 12px;
+}
+
+.hpl-profit-table {
+    width: 100%;
+    border: 1px solid #000;
+    border-collapse: collapse;
+}
+
+.hpl-profit-table th,
+.hpl-profit-table td {
+    border: 1px solid #000;
+    padding: 3px 5px;
+    font-size: 9px;
+}
+
+.hpl-profit-table th {
+    font-weight: bold;
+    text-align: right;
+}
+
+.hpl-profit-table th:first-child {
+    text-align: left;
+}
+
+.hpl-profit-table td {
+    text-align: right;
+    font-weight: bold;
+}
+
+.hpl-profit-table td:first-child {
+    text-align: left;
+}
+
+/* ============================================
+   SCREEN DISPLAY STYLES (Summary Card)
+   ============================================ */
+.house-pl-summary-card {
+    background-color: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 0 0 8px 8px;
+    padding: 24px;
+    text-align: center;
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+@media print {
+    .house-pl-pdf-container {
+        width: 100%;
+        padding: 10mm;
+        margin: 0;
+    }
+}
