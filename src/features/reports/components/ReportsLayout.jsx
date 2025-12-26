@@ -11,7 +11,7 @@ const ReportsLayout = () => {
   return (
     <div style={{ minHeight: 'calc(100vh - 12vh)' }}>
       {/* Content Area - Removed duplicate sidebar menu; navigation is handled by main sidebar */}
-      <main className="w-100 bg-light" style={{ overflowY: 'auto' }}>
+      <main className="w-100 " style={{ overflowY: 'auto' }}>
         <Outlet />
       </main>
     </div>

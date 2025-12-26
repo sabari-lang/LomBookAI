@@ -11,49 +11,16 @@ import moment from 'moment';
 
 /**
  * Format a date for API submission
- * @param {Date|string|null|undefined} date - Date object, ISO string, or null
+ * @param {Date|string|null|undefined} value - Date object, ISO string, or null
  * @returns {string|null} Formatted date string (yyyy-MM-dd) or null
  */
-export const formatDateForApi = (date) => {
-    if (!date) {
-        return null;
-    }
+export const formatDateForApi = (value) => {
+    if (!value) return null;
 
-    // If it's already a string in yyyy-MM-dd format, return as-is
-    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        return date;
-    }
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return null;
 
-    // If it's a string in dd-MM-yyyy format, convert it
-    if (typeof date === 'string' && /^\d{2}-\d{2}-\d{4}$/.test(date)) {
-        const [day, month, year] = date.split('-');
-        return `${year}-${month}-${day}`;
-    }
-
-    // Try to parse with moment (handles various formats)
-    try {
-        const parsed = moment(date);
-        if (parsed.isValid()) {
-            return parsed.format('YYYY-MM-DD');
-        }
-    } catch (e) {
-        console.warn('[dateUtils] Failed to parse date with moment:', date, e);
-    }
-
-    // Fallback to native Date
-    try {
-        const dateObj = date instanceof Date ? date : new Date(date);
-        if (!isNaN(dateObj.getTime())) {
-            const year = dateObj.getFullYear();
-            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-            const day = String(dateObj.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        }
-    } catch (e) {
-        console.warn('[dateUtils] Failed to parse date:', date, e);
-    }
-
-    return null;
+    return date.toISOString().split("T")[0]; // yyyy-mm-dd
 };
 
 /**

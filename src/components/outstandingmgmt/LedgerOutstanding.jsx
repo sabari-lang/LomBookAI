@@ -1,218 +1,170 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { getLedgerOutstanding, downloadCsv, viewReportUrl } from "./outstandingAPI";
-import { notifyError, notifySuccess } from "../../utils/notifications";
+import CommonSectionHeader from "../logisticsservices/bl/navbar/CommonSectionHeader";
 
 const LedgerOutstanding = () => {
-    const [partyName, setPartyName] = useState("");
-    const [fromDate, setFromDate] = useState(null);
-    const [toDate, setToDate] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [data, setData] = useState([]);
-    const [error, setError] = useState("");
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
-    const handleResult = async () => {
-        if (!partyName || !fromDate || !toDate) {
-            notifyError("Party Name, From Date, and To Date are required");
-            return;
-        }
+  const [partyName, setPartyName] = useState("");
+  const [fromDate, setFromDate] = useState(null);
+  const [toDate, setToDate] = useState(null);
 
-        setLoading(true);
-        setError("");
-        try {
-            const result = await getLedgerOutstanding({
-                partyName,
-                fromDate,
-                toDate,
-            });
-            setData(result.data || []);
-            if (result.data && result.data.length > 0) {
-                notifySuccess("Data loaded successfully");
-            }
-        } catch (err) {
-            setError(err.message || "Failed to load data");
-            notifyError(err.message || "Failed to load data");
-            setData([]);
-        } finally {
-            setLoading(false);
-        }
-    };
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState([]);
 
-    const handleViewReport = () => {
-        if (!partyName || !fromDate || !toDate) {
-            notifyError("Party Name, From Date, and To Date are required");
-            return;
-        }
-        const url = viewReportUrl("/outstanding/ledger", { partyName, fromDate, toDate });
-        window.open(url, "_blank");
-    };
+  const partyOptions = useMemo(() => [], []);
+  const isActionDisabled = !partyName || !fromDate || !toDate || loading;
 
-    const handleDownloadCsv = async () => {
-        if (!partyName || !fromDate || !toDate) {
-            notifyError("Party Name, From Date, and To Date are required");
-            return;
-        }
-        try {
-            const blob = await downloadCsv("/outstanding/ledger", { partyName, fromDate, toDate });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `ledger-outstanding-${new Date().toISOString().split("T")[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-            notifySuccess("CSV downloaded successfully");
-        } catch (err) {
-            notifyError(err.message || "Failed to download CSV");
-        }
-    };
+  return (
+    <div className="container-fluid p-4">
+      <div className="card shadow-sm mt-3">
+        <CommonSectionHeader
+          title="Ledger Outstanding Report"
+          type="master"
+          isCollapsed={isCollapsed}
+          onToggle={() => setIsCollapsed((p) => !p)}
+        />
 
-    return (
-        <div className="container-fluid p-0">
-            <div className="card shadow-sm m-3">
-                {/* Breadcrumb - Top Right */}
-                <div className="d-flex justify-content-end px-3 pt-2 small text-muted">
-                    <nav aria-label="breadcrumb">
-                        <ol className="breadcrumb mb-0">
-                            <li className="breadcrumb-item"><a href="#/">Home</a></li>
-                            <li className="breadcrumb-item active" aria-current="page">Ledger Outstanding Report</li>
-                        </ol>
-                    </nav>
-                </div>
+        {!isCollapsed && (
+          <div className="card-body">
+            {/* Filters */}
+            <div className="row g-3 align-items-end">
+              <div className="col-md-4">
+                <label className="form-label fw-semibold">Party Name</label>
+                <select
+                  className="form-select"
+                  value={partyName}
+                  onChange={(e) => setPartyName(e.target.value)}
+                >
+                  <option value="">-Select Party-</option>
+                  {partyOptions.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                {/* Blue Header Bar */}
-                <div className="px-3 py-2 text-white fw-semibold bg-primary">
-                    <h5 className="m-0">Ledger Outstanding Report</h5>
-                </div>
+              <div className="col-md-3">
+                <label className="form-label fw-semibold">From</label>
+                <DatePicker
+                  selected={fromDate}
+                  onChange={(d) => setFromDate(d)}
+                  dateFormat="dd-MM-yyyy"
+                  placeholderText="dd-mm-yyyy"
+                  className="form-control"
+                />
+              </div>
 
-                <div className="card-body">
-                    {/* Filter Row */}
-                    <div className="row g-3 px-3 pt-3">
-                        <div className="col-md-4">
-                            <label className="form-label fw-semibold">Party Name</label>
-                            <select
-                                className="form-select"
-                                value={partyName}
-                                onChange={(e) => setPartyName(e.target.value)}
-                            >
-                                <option value="">-Select Party-</option>
-                                {/* TODO: Populate from API */}
-                            </select>
-                        </div>
-
-                        <div className="col-md-3">
-                            <label className="form-label fw-semibold">From</label>
-                            <DatePicker
-                                selected={fromDate}
-                                onChange={(date) => setFromDate(date)}
-                                dateFormat="dd-MM-yyyy"
-                                placeholderText="dd-mm-yyyy"
-                                className="form-control"
-                                showYearDropdown
-                                dropdownMode="select"
-                            />
-                        </div>
-
-                        <div className="col-md-3">
-                            <label className="form-label fw-semibold">To</label>
-                            <DatePicker
-                                selected={toDate}
-                                onChange={(date) => setToDate(date)}
-                                dateFormat="dd-MM-yyyy"
-                                placeholderText="dd-mm-yyyy"
-                                className="form-control"
-                                showYearDropdown
-                                dropdownMode="select"
-                            />
-                        </div>
-                    </div>
-
-                    {/* Buttons Row */}
-                    <div className="d-flex gap-2 px-3 pt-2 pb-3">
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleResult}
-                            disabled={loading}
-                        >
-                            {loading ? "Loading..." : "Result"}
-                        </button>
-                        <button
-                            className="btn btn-info text-white"
-                            onClick={handleViewReport}
-                            disabled={!partyName || !fromDate || !toDate}
-                        >
-                            View Report
-                        </button>
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleDownloadCsv}
-                            disabled={!partyName || !fromDate || !toDate}
-                        >
-                            Download Csv File
-                        </button>
-                    </div>
-
-                    {error && (
-                        <div className="alert alert-warning px-3" role="alert">
-                            {error}
-                        </div>
-                    )}
-
-                    {/* Table */}
-                    <div className="table-responsive px-3 pb-3">
-                        <table className="table table-bordered align-middle mb-0">
-                            <thead className="table-light">
-                                <tr>
-                                    <th>Sl.No</th>
-                                    <th>Voucher Date</th>
-                                    <th>Voucher No</th>
-                                    <th>Voucher Type</th>
-                                    <th>Jobno</th>
-                                    <th>Master No</th>
-                                    <th>House No</th>
-                                    <th>Bill Amount</th>
-                                    <th>Received Amount</th>
-                                    <th>Pending Amount</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {loading ? (
-                                    <tr>
-                                        <td colSpan="10" className="text-center py-4">
-                                            <div className="spinner-border text-primary"></div> Loading...
-                                        </td>
-                                    </tr>
-                                ) : data.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="10" className="text-center py-4">
-                                            No data available in table
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    data.map((row, index) => (
-                                        <tr key={index}>
-                                            <td>{index + 1}</td>
-                                            <td>{row.voucherDate || "-"}</td>
-                                            <td>{row.voucherNo || "-"}</td>
-                                            <td>{row.voucherType || "-"}</td>
-                                            <td>{row.jobno || "-"}</td>
-                                            <td>{row.masterNo || "-"}</td>
-                                            <td>{row.houseNo || "-"}</td>
-                                            <td>{row.billAmount || "-"}</td>
-                                            <td>{row.receivedAmount || "-"}</td>
-                                            <td>{row.pendingAmount || "-"}</td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+              <div className="col-md-3">
+                <label className="form-label fw-semibold">To</label>
+                <DatePicker
+                  selected={toDate}
+                  onChange={(d) => setToDate(d)}
+                  dateFormat="dd-MM-yyyy"
+                  placeholderText="dd-mm-yyyy"
+                  className="form-control"
+                />
+              </div>
             </div>
-        </div>
-    );
+
+            {/* Buttons (NO Bootstrap btn class) */}
+            <div className="d-flex gap-2 mt-3">
+              <button
+                type="button"
+                className="tw-bg-blue-600 hover:tw-bg-blue-700 tw-text-white tw-px-4 tw-py-2 tw-rounded tw-font-medium disabled:tw-opacity-50"
+                disabled={loading}
+                onClick={() => {
+                  // TODO: connect Result API
+                }}
+              >
+                {loading ? "Loading..." : "Result"}
+              </button>
+
+              <button
+                type="button"
+                className="tw-bg-teal-600 hover:tw-bg-teal-700 tw-text-white tw-px-4 tw-py-2 tw-rounded tw-font-medium disabled:tw-opacity-50"
+                disabled={isActionDisabled}
+                onClick={() => {
+                  // TODO: connect View Report
+                }}
+              >
+                View Report
+              </button>
+
+              <button
+                type="button"
+                className="tw-bg-blue-600 hover:tw-bg-blue-700 tw-text-white tw-px-4 tw-py-2 tw-rounded tw-font-medium disabled:tw-opacity-50"
+                disabled={isActionDisabled}
+                onClick={() => {
+                  // TODO: connect Download CSV
+                }}
+              >
+                Download Csv File
+              </button>
+            </div>
+
+            {/* Table */}
+            <div className="table-responsive mt-4">
+              <table className="table table-bordered align-middle">
+                <thead className="table-light">
+                  <tr>
+                    <th style={{ width: 70 }}>Sl.No</th>
+                    <th>Voucher Date</th>
+                    <th>Voucher No</th>
+                    <th>Voucher Type</th>
+                    <th>Jobno</th>
+                    <th>Master No</th>
+                    <th>House No</th>
+                    <th>Bill Amount</th>
+                    <th>Received Amount</th>
+                    <th>Pending Amount</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td colSpan="10" className="text-center py-4">
+                        <span
+                          className="spinner-border spinner-border-sm me-2"
+                          role="status"
+                          aria-hidden="true"
+                        />
+                        Loading...
+                      </td>
+                    </tr>
+                  ) : data.length === 0 ? (
+                    <tr>
+                      <td colSpan="10" className="text-center py-4 text-muted">
+                        No data available in table
+                      </td>
+                    </tr>
+                  ) : (
+                    data.map((row, idx) => (
+                      <tr key={idx}>
+                        <td>{idx + 1}</td>
+                        <td>{row?.voucherDate || "-"}</td>
+                        <td>{row?.voucherNo || "-"}</td>
+                        <td>{row?.voucherType || "-"}</td>
+                        <td>{row?.jobno || "-"}</td>
+                        <td>{row?.masterNo || "-"}</td>
+                        <td>{row?.houseNo || "-"}</td>
+                        <td>{row?.billAmount || "-"}</td>
+                        <td>{row?.receivedAmount || "-"}</td>
+                        <td>{row?.pendingAmount || "-"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 export default LedgerOutstanding;

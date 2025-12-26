@@ -37,6 +37,7 @@ const baseInitialValues = {
     // LEFT lower section
     onBoardDate: null,
     arrivalDate: null,
+    // masterDate: moment().toDate(),
     precarriageBy: "N.A",
     portDischarge: "",
     freightTerm: "",
@@ -225,7 +226,7 @@ const JobCreationSeaInbound = ({ editData, setEditData }) => {
         // Get current container values (handle null/undefined)
         const currentPkg = firstContainer.pkg ?? "";
         const currentWgt = firstContainer.wgt ?? "";
-        
+
         // Convert package/grossWeight to strings for comparison
         const packageStr = packageValue != null ? String(packageValue) : "";
         const weightStr = grossWeightValue != null ? String(grossWeightValue) : "";

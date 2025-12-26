@@ -157,6 +157,8 @@ import LscAirOutboundJobs from "../../../pages/lom-supply-chain/air-outbound/Lsc
 import LscOceanInboundJobs from "../../../pages/lom-supply-chain/ocean-inbound/LscOceanInboundJobs";
 import LscOceanOutboundJobs from "../../../pages/lom-supply-chain/ocean-outbound/LscOceanOutboundJobs";
 import Dashboard from "../../dashboard/Dashboard";
+import DashboardPage from "../../../pages/dashboard/Dashboard";
+import FinanceDashboard from "../../dashboard/FinanceDashboard";
 // Outstanding MGMT imports
 import LedgerOutstanding from "../../outstandingmgmt/LedgerOutstanding";
 import OutstandingSummary from "../../outstandingmgmt/OutstandingSummary";
@@ -401,7 +403,9 @@ const Navigation = () => {
                   <Route path="/lom/ocean-outbound" element={<FormLayout><LscOceanOutboundJobs /></FormLayout>} />
                   
                   {/* Dashboard */}
-                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/freight-dashboard" element={<FormLayout><Dashboard /></FormLayout>} />
+                  <Route path="/finance-dashboard" element={<FormLayout><FinanceDashboard /></FormLayout>} />
 
                   {/* Outstanding MGMT */}
                   <Route path="/outstanding/ledger" element={<LedgerOutstanding />} />

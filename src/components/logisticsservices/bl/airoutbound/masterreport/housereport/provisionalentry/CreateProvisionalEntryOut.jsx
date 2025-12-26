@@ -51,7 +51,8 @@ const CreateProvisionalEntryOut = () => {
         state: "",
         country: "",
         isSez: "",
-        provisionalDate: "",
+        provisionalDate: moment().format("YYYY-MM-DD"),
+
         status: "Accounting Entry (Pending)",
         jobNo,
         hawbNo,
@@ -424,8 +425,8 @@ const CreateProvisionalEntryOut = () => {
                                     </td>
 
                                     <td className="text-center">
-                                        <FaSearch 
-                                            style={{ cursor: "pointer" }} 
+                                        <FaSearch
+                                            style={{ cursor: "pointer" }}
                                             onClick={() => {
                                                 setActiveItemRowIndex(index);
                                                 setItemPopupOpen(true);

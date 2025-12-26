@@ -33,7 +33,7 @@ const RaiseAccountingEntrySeaIn = ({ editData, setEditData }) => {
     const hblNo = safeStr(storedHouse?.hbl || storedHouse?.hblNo);
 
     const isEditing = Boolean(editData?._id || editData?.id);
-    
+
     const [open, setOpen] = useState(false);
 
     // Helper function to format date for input[type="date"]
@@ -186,7 +186,7 @@ const RaiseAccountingEntrySeaIn = ({ editData, setEditData }) => {
         safeArr(rows).map((it) => ({
             provisionalDate: safeStr(it.date),
             status: safeStr(it.status),
-            account: safeStr(it.account),
+            description: safeStr(it.account),
             sac: safeStr(it.sac),
             currency: safeStr(it.currency),
             qty: safeNum(it.qty),
@@ -270,10 +270,11 @@ const RaiseAccountingEntrySeaIn = ({ editData, setEditData }) => {
                                             control={control}
                                             render={({ field }) => (
                                                 <select {...field} className="form-select">
-                                                    <option value="">--Select--</option>
-                                                    <option value="Purchase">Purchase</option>
+                                                    <option value="">--Select Type--</option>
                                                     <option value="Sales">Sales</option>
                                                     <option value="Journal">Journal</option>
+                                                    <option value="Credit Note">Credit Note</option>
+                                                    <option value="Debit Note">Debit Note</option>
                                                 </select>
                                             )}
                                         />

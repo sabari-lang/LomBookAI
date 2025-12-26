@@ -69,7 +69,7 @@ const ValueAddedService = () => {
 
     return (
         <>
-            <div className="container-fluid mt-3">
+            <div className="container-fluid p-4">
                 {/* HEADER */}
                 <div className="d-flex justify-content-between align-items-center bg-primary text-white px-3 py-2 rounded-top">
                     <h5 className="m-0">Value Added Service</h5>

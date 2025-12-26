@@ -740,7 +740,7 @@ export default function Sidebar() {
                     } py-2 border-0 rounded-0 ${exact ? bgExact : descendant ? bgDesc : ""}`}
                   onClick={() => handleNavClick(item)}
                   style={{
-                    color: exact || descendant ? "#ffffff" : "var(--sidebar-text, #e5e7eb)",
+                    color: exact || descendant ? "#fff" : "var(--sidebar-text, #fff)",
                   }}
                   {...(!isExpanded
                     ? {

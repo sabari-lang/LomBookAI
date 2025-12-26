@@ -7,7 +7,7 @@ import moment from "moment/moment";
 import { handleProvisionalError } from "../../../../utils/handleProvisionalError";
 import { notifySuccess, notifyError, notifyInfo } from "../../../../utils/notifications";
 
-import { applyShipmentTermPaymentLogic } from "../../../../utils/jobDefaults";
+import { applyJobDefaults, applyShipmentTermPaymentLogic } from "../../../../utils/jobDefaults";
 import NewWindow from "react-new-window";
 import CustomerSearch from "../../../common/popup/CustomerSearch";
 import { refreshKeyboard } from "../../../../utils/refreshKeyboard";
@@ -15,6 +15,8 @@ import { SHIPMENT_CATEGORY } from "../../../../constants/shipment";
 import { INCOTERMS_CONFIG, INCOTERMS_DEFAULTS } from "../../../../constants/incotermsConfig";
 import { DEFAULT_CONSIGNEE } from "../../../../utils/defaultPartyInfo";
 import { closeModal, cleanupModalBackdrop } from "../../../../utils/closeModal";
+import { formatDateForApi } from "../../../../utils/dateUtils";
+import { encodeCodedFields, decodeCodedFields } from "../../../../utils/fieldCodeMapper";
 
 
 
@@ -162,55 +164,49 @@ const JobCreation = ({ editData, setEditData }) => {
 
         setIsLoadingEdit(true);
 
+        // Decode coded fields first (wtvalPP, coll1, otherPP, coll2, declaredCarriage, declaredCustoms, insurance)
+     
+        
+        // Normalize backend keys to form keys
+        const normalizedEditData = {
+            ...editData,
+            // Map backend keys to form keys (preserve if already present)
+            mawbNo: editData.mawbNo || editData.mawb || "",
+            shipperName: editData.shipperName || editData.shipper || "",
+            shipperAddress: editData.shipperAddress || editData.shipperAddr || "",
+            consigneeName: editData.consigneeName || editData.consignee || "",
+            consigneeAddress: editData.consigneeAddress || editData.consigneeAddr || "",
+            notifyAddress: editData.notifyAddress || editData.notifyAddr || "",
+        };
+
+        // Apply defaults and shipment term logic, then format dates
+        const merged = applyShipmentTermPaymentLogic(
+            applyJobDefaults({
+                ...initialValues, // BASE DEFAULTS
+                ...normalizedEditData,        // OVERRIDE WITH API DATA
+                arrivalDate: normalizedEditData?.arrivalDate
+                    ? moment(normalizedEditData.arrivalDate).format("YYYY-MM-DD")
+                    : "",
+                departureDate: normalizedEditData?.departureDate
+                    ? moment(normalizedEditData.departureDate).format("YYYY-MM-DD")
+                    : "",
+                executedDate: normalizedEditData?.executedDate
+                    ? moment(normalizedEditData.executedDate).format("YYYY-MM-DD")
+                    : "",
+            })
+        );
+        
         // Batch form population: single reset() instead of multiple setValue calls
-        reset({
-            ...initialValues, // BASE DEFAULTS
-            ...editData,        // OVERRIDE WITH API DATA
-            arrivalDate: editData?.arrivalDate
-                ? moment(editData.arrivalDate).format("YYYY-MM-DD")
-                : "",
+        reset(merged);
 
-            departureDate: editData?.departureDate
-                ? moment(editData.departureDate).format("YYYY-MM-DD")
-                : "",
-            executedDate: editData?.executedDate
-                ? moment(editData.executedDate).format("YYYY-MM-DD")
-                : "",
-        });
-
+        // Initialize prevConsolRef to prevent consol-change useEffect from clearing consignee
+        prevConsolRef.current = merged?.consol || null;
         // Reset checkbox states based on loaded data
-        const notifyName = editData?.notifyName || "";
+        const notifyName = normalizedEditData?.notifyName || "";
         setSameAsConsignee(notifyName === "SAME AS CONSIGNEE");
         setCopyAsConsignee(false); // Reset copy checkbox on edit load
 
-        // Explicit first field focus on every edit entry
-        requestAnimationFrame(() => {
-            if (firstInputRef.current) {
-                firstInputRef.current.focus();
-                if (typeof window !== 'undefined' && window.localStorage) {
-                    try {
-                        const enableLogging = localStorage.getItem('debug.keyboard') === 'true';
-                        if (enableLogging) {
-                            console.log('[Keyboard] First field focused', {
-                                field: 'jobNo',
-                                editId: editData.id,
-                                hasFocus: document.hasFocus(),
-                                visibilityState: document.visibilityState,
-                                targetElement: firstInputRef.current ? {
-                                    tag: firstInputRef.current.tagName,
-                                    type: firstInputRef.current.type || 'N/A',
-                                    id: firstInputRef.current.id || 'N/A',
-                                    name: firstInputRef.current.name || 'N/A',
-                                } : null,
-                            });
-                        }
-                    } catch (e) {
-                        // Ignore logging errors
-                    }
-                }
-            }
-        });
-
+   
         // Call refreshKeyboard after form values are populated
         refreshKeyboard();
         // Allow form to settle after reset, then disable edit loading flag
@@ -221,12 +217,24 @@ const JobCreation = ({ editData, setEditData }) => {
     // OCR create-mode prefill (when editData exists but has no id)
     useEffect(() => {
         if (!editData || editData?.id) return;
+        
+        // Normalize backend keys to form keys for OCR prefill
+        const normalizedEditData = {
+            ...editData,
+            mawbNo: editData.mawbNo || editData.mawb || "",
+            shipperName: editData.shipperName || editData.shipper || "",
+            shipperAddress: editData.shipperAddress || editData.shipperAddr || "",
+            consigneeName: editData.consigneeName || editData.consignee || "",
+            consigneeAddress: editData.consigneeAddress || editData.consigneeAddr || "",
+            notifyAddress: editData.notifyAddress || editData.notifyAddr || "",
+        };
+        
         reset({
             ...initialValues,
-            ...editData,
-            arrivalDate: editData?.arrivalDate ? moment(editData.arrivalDate).format("YYYY-MM-DD") : "",
-            departureDate: editData?.departureDate ? moment(editData.departureDate).format("YYYY-MM-DD") : "",
-            executedDate: editData?.executedDate ? moment(editData.executedDate).format("YYYY-MM-DD") : "",
+            ...normalizedEditData,
+            arrivalDate: normalizedEditData?.arrivalDate ? moment(normalizedEditData.arrivalDate).format("YYYY-MM-DD") : "",
+            departureDate: normalizedEditData?.departureDate ? moment(normalizedEditData.departureDate).format("YYYY-MM-DD") : "",
+            executedDate: normalizedEditData?.executedDate ? moment(normalizedEditData.executedDate).format("YYYY-MM-DD") : "",
         });
     }, [editData, reset]);
 

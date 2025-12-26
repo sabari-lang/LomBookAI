@@ -246,18 +246,10 @@ const QuotationForm = ({ mode = "N" }) => {
         <div className="container-fluid p-0">
             <div className="card shadow-sm m-3">
                 {/* Breadcrumb */}
-                <div className="d-flex justify-content-end px-3 pt-2 small text-muted">
-                    <nav aria-label="breadcrumb">
-                        <ol className="breadcrumb mb-0">
-                            <li className="breadcrumb-item"><a href="#/">Home</a></li>
-                            <li className="breadcrumb-item">Quote Management</li>
-                            <li className="breadcrumb-item active" aria-current="page">{breadcrumbText}</li>
-                        </ol>
-                    </nav>
-                </div>
+             
 
                 {/* Yellow Title Bar */}
-                <div className="bg-warning text-dark fw-semibold px-3 py-2">
+                <div className="bg-warning text-dark fw-semibold rounded-1 px-3 py-2">
                     <h5 className="m-0">{titleText}</h5>
                 </div>
 

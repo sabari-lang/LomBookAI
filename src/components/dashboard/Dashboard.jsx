@@ -2,7 +2,8 @@ import React, { useMemo } from "react";
 
 /**
  * ------------------------------------------------------------
- * ✅ Static data (matches the screenshot)
+ * Static data (matches the screenshot)
+ * Replace with API when ready.
  * ------------------------------------------------------------
  */
 const STATIC_DASHBOARD = {
@@ -45,70 +46,66 @@ const STATIC_DASHBOARD = {
     totalUsers: 53,
 };
 
-/**
- * ------------------------------------------------------------
- * ✅ API scaffold (enable later)
- * ------------------------------------------------------------
- * Uncomment when ready:
- * - react-query useQuery
- * - api client
- *
- * import { useQuery } from "@tanstack/react-query";
- * import { api } from "../../lib/httpClient";
- *
- * const getDashboardStats = async () => (await api.get("/dashboard/stats")).data;
- */
-
 const toRows = (statuses) =>
     Object.entries(statuses || {}).map(([label, value]) => ({
-        label,
+        label: String(label),
         value: Number(value) || 0,
     }));
 
 const styles = {
     page: {
-        background: "#f6f8fb",
+        background: "#F6FCFF",
         padding: "14px 12px 18px",
         minHeight: "calc(100vh - 60px)",
     },
+
+    // Card base (auto-height)
     card: {
-        borderRadius: 12,
+        borderRadius: 6,
         overflow: "hidden",
         background: "#fff",
         border: "1px solid rgba(15, 23, 42, 0.08)",
         boxShadow: "0 10px 24px rgba(15, 23, 42, 0.06)",
-        height: "100%",
         transition: "transform 160ms ease, box-shadow 160ms ease",
     },
+
+    // CSS-like hover (no state re-render)
     cardHover: {
         transform: "translateY(-2px)",
         boxShadow: "0 16px 32px rgba(15, 23, 42, 0.10)",
     },
+
     cardHeader: (bg, color) => ({
         background: bg,
         color,
         padding: "12px 14px",
-        fontWeight: 600, // ✅ reduced (was too bold)
+        fontWeight: 600,
         fontSize: 14,
         letterSpacing: 0.15,
         borderBottom: "1px solid rgba(0,0,0,0.08)",
     }),
+
     cardBody: {
         padding: 14,
     },
+
     sectionHeader: {
         fontWeight: 700,
         fontSize: 13.5,
         color: "#0f172a",
         marginBottom: 10,
     },
+
     list: {
         display: "grid",
         gap: 8,
-        maxHeight: 260,
-        overflow: "auto",
         paddingRight: 4,
+
+        // ✅ optional: if you want scroll like screenshot, enable below:
+        // maxHeight: 260,
+        // overflow: "auto",
     },
+
     row: {
         display: "flex",
         alignItems: "baseline",
@@ -117,6 +114,7 @@ const styles = {
         fontSize: 14,
         lineHeight: 1.25,
     },
+
     rowLabel: {
         color: "#0f172a",
         minWidth: 0,
@@ -125,6 +123,7 @@ const styles = {
         textOverflow: "ellipsis",
         whiteSpace: "nowrap",
     },
+
     rowValue: {
         fontWeight: 800,
         color: "#0f172a",
@@ -132,6 +131,7 @@ const styles = {
         minWidth: 34,
         textAlign: "right",
     },
+
     total: {
         marginTop: 14,
         paddingTop: 12,
@@ -143,26 +143,29 @@ const styles = {
         justifyContent: "space-between",
         alignItems: "baseline",
     },
+
     totalValue: {
         fontWeight: 900,
         letterSpacing: 0.1,
     },
 
     otherDetailsCard: {
-        borderRadius: 12,
+        borderRadius: 6,
         overflow: "hidden",
         background: "#fff",
         border: "1px solid rgba(15, 23, 42, 0.08)",
         boxShadow: "0 10px 24px rgba(15, 23, 42, 0.06)",
     },
+
     otherHeader: {
         background: "#343a40",
         color: "#fff",
         padding: "12px 14px",
-        fontWeight: 600, // ✅ reduced
+        fontWeight: 600,
         fontSize: 14,
         letterSpacing: 0.15,
     },
+
     otherBody: {
         padding: 18,
         minHeight: 190,
@@ -179,12 +182,14 @@ const styles = {
         maxWidth: 360,
         minHeight: 112,
     },
+
     userNumber: {
         fontSize: 44,
         fontWeight: 900,
         lineHeight: 1,
         letterSpacing: 0.3,
     },
+
     userLabel: {
         marginTop: 10,
         fontSize: 14,
@@ -211,15 +216,27 @@ const IconUsers = (props) => (
     </svg>
 );
 
+const UsersTile = ({ value }) => {
+    return (
+        <div style={styles.userTile} role="group" aria-label="Total users">
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center" }}>
+                <div>
+                    <div style={styles.userNumber}>{value}</div>
+                    <div style={styles.userLabel}>Total users</div>
+                </div>
+                <IconUsers style={{ opacity: 0.22, flexShrink: 0 }} />
+            </div>
+        </div>
+    );
+};
+
 const StatusCard = ({ title, headerBg, headerColor, statuses, total }) => {
     const rows = useMemo(() => toRows(statuses), [statuses]);
-    const [hover, setHover] = React.useState(false);
 
     return (
         <section
-            style={{ ...styles.card, ...(hover ? styles.cardHover : null) }}
-            onMouseEnter={() => setHover(true)}
-            onMouseLeave={() => setHover(false)}
+            className="dashboard-status-card"
+            style={styles.card}
             aria-label={title}
         >
             <div style={styles.cardHeader(headerBg, headerColor)}>{title}</div>
@@ -228,10 +245,10 @@ const StatusCard = ({ title, headerBg, headerColor, statuses, total }) => {
                 <div style={styles.sectionHeader}>Status</div>
 
                 <div style={styles.list}>
-                    {rows.map((r, idx) => (
-                        <div key={`${r.label}-${idx}`} style={styles.row}>
+                    {rows.map((r) => (
+                        <div key={r.label} style={styles.row}>
                             <div title={r.label} style={styles.rowLabel}>
-                                {r.label} <span style={{ opacity: 0.55, fontWeight: 700 }}>-</span>
+                                {r.label}
                             </div>
                             <div style={styles.rowValue}>{r.value}</div>
                         </div>
@@ -247,34 +264,25 @@ const StatusCard = ({ title, headerBg, headerColor, statuses, total }) => {
     );
 };
 
-const UsersTile = ({ value }) => {
-    return (
-        <div style={styles.userTile} role="group" aria-label="Total No of Users">
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "center" }}>
-                <div>
-                    <div style={styles.userNumber}>{value}</div>
-                    <div style={styles.userLabel}>Total No of Users</div>
-                </div>
-                <IconUsers style={{ opacity: 0.22, flexShrink: 0 }} />
-            </div>
-        </div>
-    );
-};
-
 const Dashboard = () => {
-    /**
-     * ✅ When enabling API:
-     *
-     * const query = useQuery({ queryKey: ["dashboardStats"], queryFn: getDashboardStats, retry: 1 });
-     * const stats = query.data || STATIC_DASHBOARD;
-     */
-
+    // Replace later with API (react-query) if needed:
+    // const stats = query.data || STATIC_DASHBOARD;
     const stats = STATIC_DASHBOARD;
 
     return (
         <div className="container-fluid" style={styles.page}>
+            {/* Small CSS for hover without React state */}
+            <style>
+                {`
+          .dashboard-status-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 32px rgba(15, 23, 42, 0.10);
+          }
+        `}
+            </style>
+
             {/* Top 3 cards */}
-            <div className="row g-3">
+            <div className="row g-3 align-items-start">
                 <div className="col-12 col-md-4">
                     <StatusCard
                         title={stats.clearancePending.title}
@@ -309,11 +317,11 @@ const Dashboard = () => {
             {/* Other Details */}
             <div className="row g-3" style={{ marginTop: 18 }}>
                 <div className="col-12">
-                    <section style={styles.otherDetailsCard} aria-label="Other Details">
+                    <section style={styles.otherDetailsCard} aria-label="Other details">
                         <div style={styles.otherHeader}>Other Details</div>
 
                         <div style={styles.otherBody}>
-                            <div className="row">
+                            <div className="row g-3 align-items-start">
                                 <div className="col-12 col-md-4">
                                     <UsersTile value={stats.totalUsers} />
                                 </div>

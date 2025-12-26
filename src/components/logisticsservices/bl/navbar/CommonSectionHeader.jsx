@@ -51,7 +51,7 @@ const CommonSectionHeader = ({
 
     return (
         <div
-            className={`tw-flex tw-items-center tw-justify-between tw-text-white tw-px-4 tw-py-3 tw-font-semibold tw-rounded-t-lg tw-mt-3 ${bgColor}`}
+            className={`tw-flex tw-items-center tw-justify-between tw-text-white tw-px-4 tw-py-3 tw-font-semibold tw-rounded-t-lg  ${bgColor}`}
         >
             <span>{title}</span>
 

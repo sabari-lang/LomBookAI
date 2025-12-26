@@ -12,7 +12,7 @@ import { FaSearch } from "react-icons/fa";
 import NewWindow from "react-new-window";
 import VendorSearch from "../../../../../../common/popup/VendorSearch";
 
- // adjust path to your api file
+// adjust path to your api file
 import { handleProvisionalError } from "../../../../../../../utils/handleProvisionalError";
 import { createOceanInboundVendorAccount, updateOceanInboundVendorAccount } from "../../../oceanInboundApi";
 import { refreshKeyboard } from "../../../../../../../utils/refreshKeyboard";
@@ -60,7 +60,7 @@ const sampleRow = () => ({
 
 const RaisingEntryVendorSeaIn = ({ editData, setEditData }) => {
     const isEditing = Boolean(editData?.id || editData?._id);
-    
+
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const [open, setOpen] = useState(false);
@@ -75,7 +75,8 @@ const RaisingEntryVendorSeaIn = ({ editData, setEditData }) => {
         safeStr(storedHouse?.hbl) ||
         safeStr(storedHouse?.hblNo) ||
         safeStr(storedHouse?.houseNumber);
-    const mawbNo = safeStr(storedHouse?.mawb);
+    const mawbNo = safeStr(storedHouse?.mawb ?? storedHouse?.mblNo ?? "");
+
 
     // --------------------------
     // Default values
@@ -111,7 +112,7 @@ const RaisingEntryVendorSeaIn = ({ editData, setEditData }) => {
         control,
         name: "items",
     });
-    
+
     // watch items for auto calc
     const watchedItems = useWatch({ control, name: "items" }) || [];
 
@@ -717,7 +718,7 @@ const RaisingEntryVendorSeaIn = ({ editData, setEditData }) => {
                                 </div>
                             </form>
 
-                            
+
                         </div>
                     </div>
                 </div>

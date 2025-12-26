@@ -1,169 +1,163 @@
 import React, { useState } from "react";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-import { getOpeningBalances, downloadCsv, viewReportUrl } from "./outstandingAPI";
-import { notifyError, notifySuccess } from "../../utils/notifications";
+import CommonSectionHeader from "../logisticsservices/bl/navbar/CommonSectionHeader";
 
 const OpeningBalances = () => {
-    const [asOnDate, setAsOnDate] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [data, setData] = useState([]);
-    const [error, setError] = useState("");
+    const [entries, setEntries] = useState(10);
+    const [searchValue, setSearchValue] = useState("");
 
-    const handleResult = async () => {
-        if (!asOnDate) {
-            notifyError("As On Date is required");
-            return;
-        }
+    // Dummy sample data
+    const sampleData = [
+        {
+            party: "AAR BEE FREIGHT FORWARDERS PRIVATE LIMITED",
+            debit: 48187.95,
+            credit: 0,
+        },
+        {
+            party: "ACOUSTICS INDIA PVT LTD.,",
+            debit: 52507.28,
+            credit: 0,
+        },
+        {
+            party: "ALINA PRIVATE LIMITED",
+            debit: 10133.84,
+            credit: 0,
+        },
+        {
+            party: "ALLTRANS SHIPPING AND LOGISTICS LLP",
+            debit: 76085.50,
+            credit: 0,
+        },
+        {
+            party: "ALPHALOGIS CO., LTD,",
+            debit: 0.00,
+            credit: 74187.19,
+        },
+    ];
 
-        setLoading(true);
-        setError("");
-        try {
-            const result = await getOpeningBalances({ asOnDate });
-            setData(result.data || []);
-            if (result.data && result.data.length > 0) {
-                notifySuccess("Data loaded successfully");
-            }
-        } catch (err) {
-            setError(err.message || "Failed to load data");
-            notifyError(err.message || "Failed to load data");
-            setData([]);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleViewReport = () => {
-        if (!asOnDate) {
-            notifyError("As On Date is required");
-            return;
-        }
-        const url = viewReportUrl("/outstanding/opening-balances", { asOnDate });
-        window.open(url, "_blank");
-    };
-
-    const handleDownloadCsv = async () => {
-        if (!asOnDate) {
-            notifyError("As On Date is required");
-            return;
-        }
-        try {
-            const blob = await downloadCsv("/outstanding/opening-balances", { asOnDate });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `opening-balances-${new Date().toISOString().split("T")[0]}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-            notifySuccess("CSV downloaded successfully");
-        } catch (err) {
-            notifyError(err.message || "Failed to download CSV");
-        }
-    };
+    const format = (num) => Number(num).toLocaleString();
 
     return (
-        <div className="container-fluid p-0">
-            <div className="card shadow-sm m-3">
-                {/* Breadcrumb - Top Right */}
-                <div className="d-flex justify-content-end px-3 pt-2 small text-muted">
-                    <nav aria-label="breadcrumb">
-                        <ol className="breadcrumb mb-0">
-                            <li className="breadcrumb-item"><a href="#/">Home</a></li>
-                            <li className="breadcrumb-item active" aria-current="page">Opening Balances</li>
-                        </ol>
-                    </nav>
-                </div>
+        <div className="container-fluid p-4">
 
-                {/* Blue Header Bar */}
-                <div className="px-3 py-2 text-white fw-semibold bg-primary">
-                    <h5 className="m-0">Opening Balances</h5>
-                </div>
+            {/* BLUE HEADER (Using CommonSectionHeader) */}
+            <CommonSectionHeader
+                title="Opening Balance"
+                type="master"  // BLUE HEADER COLOR
+                buttonText="Create Opening Balance"
+                newButtonModalId="createOpeningModal"
+                onNewButtonClick={() => {}}
+            />
 
+            <div className="card shadow-sm mx-0 mb-4">
                 <div className="card-body">
-                    {/* Filter Row */}
-                    <div className="row g-3 px-3 pt-3">
-                        <div className="col-md-3">
-                            <label className="form-label fw-semibold">As On Date</label>
-                            <DatePicker
-                                selected={asOnDate}
-                                onChange={(date) => setAsOnDate(date)}
-                                dateFormat="dd-MM-yyyy"
-                                placeholderText="dd-mm-yyyy"
-                                className="form-control"
-                                showYearDropdown
-                                dropdownMode="select"
+
+                    {/* ---- TOP CONTROLS (STATIC) ---- */}
+                    <div className="d-flex justify-content-between align-items-center px-2 mb-2">
+
+                        {/* LEFT: Show Entries */}
+                        <div className="d-flex align-items-center gap-2">
+                            <span>Show</span>
+
+                            <select
+                                className="form-select form-select-sm"
+                                style={{ width: "70px" }}
+                                value={entries}
+                                onChange={(e) => setEntries(e.target.value)}
+                            >
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+
+                            <span>entries</span>
+                        </div>
+
+                        {/* RIGHT: Search Box */}
+                        <div className="d-flex align-items-center gap-2">
+                            <span>Search:</span>
+                            <input
+                                type="text"
+                                className="form-control form-control-sm"
+                                style={{ width: "200px" }}
+                                value={searchValue}
+                                onChange={(e) => setSearchValue(e.target.value)}
                             />
                         </div>
                     </div>
 
-                    {/* Buttons Row */}
-                    <div className="d-flex gap-2 px-3 pt-2 pb-3">
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleResult}
-                            disabled={loading}
-                        >
-                            {loading ? "Loading..." : "Result"}
-                        </button>
-                        <button
-                            className="btn btn-info text-white"
-                            onClick={handleViewReport}
-                            disabled={!asOnDate}
-                        >
-                            View Report
-                        </button>
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleDownloadCsv}
-                            disabled={!asOnDate}
-                        >
-                            Download Csv File
-                        </button>
-                    </div>
-
-                    {error && (
-                        <div className="alert alert-warning px-3" role="alert">
-                            {error}
-                        </div>
-                    )}
-
-                    {/* Table */}
-                    <div className="table-responsive px-3 pb-3">
+                    {/* ---- TABLE ---- */}
+                    <div className="table-responsive">
                         <table className="table table-bordered align-middle mb-0">
+
                             <thead className="table-light">
                                 <tr>
-                                    <th>Sl.No</th>
+                                    <th style={{ width: "50px" }}>S.No</th>
                                     <th>Party Name</th>
-                                    <th>Opening Balance</th>
+                                    <th style={{ width: "120px" }}>Debit</th>
+                                    <th style={{ width: "120px" }}>Credit</th>
+                                    <th style={{ width: "120px" }}>Net</th>
+                                    <th style={{ width: "80px" }}>View</th>
                                 </tr>
                             </thead>
+
                             <tbody>
-                                {loading ? (
+                                {sampleData.length === 0 ? (
                                     <tr>
-                                        <td colSpan="3" className="text-center py-4">
-                                            <div className="spinner-border text-primary"></div> Loading...
-                                        </td>
-                                    </tr>
-                                ) : data.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="3" className="text-center py-4">
-                                            No data available in table
+                                        <td colSpan="6" className="text-center py-3">
+                                            No data available
                                         </td>
                                     </tr>
                                 ) : (
-                                    data.map((row, index) => (
-                                        <tr key={index}>
-                                            <td>{index + 1}</td>
-                                            <td>{row.partyName || "-"}</td>
-                                            <td>{row.openingBalance || "-"}</td>
-                                        </tr>
-                                    ))
+                                    sampleData.map((row, index) => {
+                                        const net = row.debit - row.credit;
+
+                                        return (
+                                            <tr key={index}>
+                                                <td>{index + 1}</td>
+                                                <td>{row.party}</td>
+
+                                                <td className="fw-semibold text-success">
+                                                    {format(row.debit)}
+                                                </td>
+
+                                                <td className="fw-semibold text-danger">
+                                                    {format(row.credit)}
+                                                </td>
+
+                                                <td
+                                                    className={`fw-semibold ${
+                                                        net >= 0 ? "text-success" : "text-danger"
+                                                    }`}
+                                                >
+                                                    {format(net)}
+                                                    {net >= 0 ? " Dr" : " Cr"}
+                                                </td>
+
+                                                <td className="text-center">
+                                                    <button
+                                                        className="btn btn-primary btn-sm"
+                                                        style={{
+                                                            width: "34px",
+                                                            height: "34px",
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            borderRadius: "4px",
+                                                        }}
+                                                    >
+                                                        <i className="bi bi-eye"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                                 )}
                             </tbody>
+
                         </table>
                     </div>
+
                 </div>
             </div>
         </div>

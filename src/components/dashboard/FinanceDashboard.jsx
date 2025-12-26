@@ -63,12 +63,12 @@ const Home = () => {
                     <li className="nav-item">
                         <button className="nav-link active">Dashboard</button>
                     </li>
-                    <li className="nav-item">
+                    {/* <li className="nav-item">
                         <button className="nav-link">Getting Started</button>
                     </li>
                     <li className="nav-item">
                         <button className="nav-link">Recent Updates</button>
-                    </li>
+                    </li> */}
                     {/* <li className="ms-auto">
           <button className="btn btn-sm btn-outline-primary">
             + New Dashboard

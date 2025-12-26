@@ -61,6 +61,7 @@ const CreateHouse = ({ editData, setEditData }) => {
         // Consignee - Auto-filled from job/master
         consigneeName: storedData?.consigneeName ?? "",
         consigneeAddr: storedData?.consigneeAddress ?? "",
+        
 
         // Notify - Auto-filled from job/master
         notifyName: storedData?.notifyName ?? "",

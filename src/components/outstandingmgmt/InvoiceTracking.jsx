@@ -1,32 +1,34 @@
 import React, { useState } from "react";
 import { getInvoiceTracking } from "./outstandingAPI";
 import { notifyError, notifySuccess } from "../../utils/notifications";
+import CommonSectionHeader from "../logisticsservices/bl/navbar/CommonSectionHeader";
 
 const InvoiceTracking = () => {
     const [invoiceNo, setInvoiceNo] = useState("");
     const [loading, setLoading] = useState(false);
     const [invoiceDetails, setInvoiceDetails] = useState([]);
     const [references, setReferences] = useState([]);
-    const [error, setError] = useState("");
+    const [isCollapsed, setIsCollapsed] = useState(false);
 
     const handleResult = async () => {
-        if (!invoiceNo || !invoiceNo.trim()) {
+        if (!invoiceNo.trim()) {
             notifyError("Invoice number is required");
             return;
         }
 
         setLoading(true);
-        setError("");
         try {
             const result = await getInvoiceTracking(invoiceNo.trim());
             setInvoiceDetails(result.invoiceDetails || []);
             setReferences(result.references || []);
-            if ((result.invoiceDetails && result.invoiceDetails.length > 0) || 
-                (result.references && result.references.length > 0)) {
+
+            if (
+                (result.invoiceDetails && result.invoiceDetails.length > 0) ||
+                (result.references && result.references.length > 0)
+            ) {
                 notifySuccess("Data loaded successfully");
             }
         } catch (err) {
-            setError(err.message || "Failed to load data");
             notifyError(err.message || "Failed to load data");
             setInvoiceDetails([]);
             setReferences([]);
@@ -36,58 +38,51 @@ const InvoiceTracking = () => {
     };
 
     return (
-        <div className="container-fluid p-0">
-            <div className="card shadow-sm m-3">
-                {/* Breadcrumb - Top Right */}
-                <div className="d-flex justify-content-end px-3 pt-2 small text-muted">
-                    <nav aria-label="breadcrumb">
-                        <ol className="breadcrumb mb-0">
-                            <li className="breadcrumb-item"><a href="#/">Home</a></li>
-                            <li className="breadcrumb-item active" aria-current="page">Invoice Tracking Report</li>
-                        </ol>
-                    </nav>
-                </div>
+        <div className="container-fluid p-4">
 
-                {/* Blue Header Bar */}
-                <div className="px-3 py-2 text-white fw-semibold bg-primary">
-                    <h5 className="m-0">Invoice Tracking Report</h5>
-                </div>
+            {/* Header Using Your Common Component */}
+            <CommonSectionHeader
+                title="Invoice Tracking Report"
+                type="master"               // Blue Color (Matches Your Screenshot)
+                isCollapsed={isCollapsed}
+                onToggle={() => setIsCollapsed(!isCollapsed)}
+            />
 
-                <div className="card-body">
-                    {/* Filter Row */}
-                    <div className="row g-3 px-3 pt-3">
-                        <div className="col-md-4">
-                            <label className="form-label fw-semibold">Invoice Number</label>
-                            <input
-                                type="text"
-                                className="form-control"
-                                value={invoiceNo}
-                                onChange={(e) => setInvoiceNo(e.target.value)}
-                                placeholder="Enter invoice number"
-                            />
+            {!isCollapsed && (
+                <div className="card shadow-sm mx-0 mb-4">
+
+                    <div className="card-body">
+
+                        {/* Invoice Number Input Exact Alignment */}
+                        <div className="px-3 pt-3">
+                            <div className="row">
+                                <div className="col-md-4">
+                                    <label className="form-label fw-semibold">Invoice Number</label>
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        value={invoiceNo}
+                                        onChange={(e) => setInvoiceNo(e.target.value)}
+                                        placeholder="Enter invoice number"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Button placed EXACTLY like screenshot */}
+                            <div className="mt-3">
+                                <button
+                                    className="tw-bg-blue-600 tw-text-white tw-px-4 tw-py-2 tw-rounded hover:tw-bg-blue-700"
+                                    onClick={handleResult}
+                                    disabled={loading}
+                                >
+                                    {loading ? "Loading..." : "Result"}
+                                </button>
+                            </div>
                         </div>
-                    </div>
 
-                    {/* Buttons Row - Only Result button */}
-                    <div className="d-flex gap-2 px-3 pt-2 pb-3">
-                        <button
-                            className="btn btn-primary"
-                            onClick={handleResult}
-                            disabled={loading}
-                        >
-                            {loading ? "Loading..." : "Result"}
-                        </button>
-                    </div>
-
-                    {error && (
-                        <div className="alert alert-warning px-3" role="alert">
-                            {error}
-                        </div>
-                    )}
-
-                    {/* Invoice Details Table - Always show */}
-                    <div className="table-responsive px-3 pb-3 mb-4">
-                        <table className="table table-bordered align-middle mb-0">
+                        {/* TABLE 1 — Invoice Details */}
+                        <div className="table-responsive px-3 pb-3 mt-3">
+                            <table className="table table-bordered table-sm align-middle mb-0">
                                 <thead className="table-light">
                                     <tr>
                                         <th>Sl.No</th>
@@ -106,23 +101,24 @@ const InvoiceTracking = () => {
                                         <th>Created Date</th>
                                     </tr>
                                 </thead>
+
                                 <tbody>
                                     {loading ? (
                                         <tr>
-                                            <td colSpan="14" className="text-center py-4">
-                                                <div className="spinner-border text-primary"></div> Loading...
+                                            <td colSpan="14" className="text-center py-3">
+                                                <div className="spinner-border text-primary"></div>
                                             </td>
                                         </tr>
                                     ) : invoiceDetails.length === 0 ? (
                                         <tr>
-                                            <td colSpan="14" className="text-center py-4">
-                                                No data available in table
+                                            <td colSpan="14" className="text-center py-3">
+                                                No data available
                                             </td>
                                         </tr>
                                     ) : (
-                                        invoiceDetails.map((row, index) => (
-                                            <tr key={index}>
-                                                <td>{index + 1}</td>
+                                        invoiceDetails.map((row, i) => (
+                                            <tr key={i}>
+                                                <td>{i + 1}</td>
                                                 <td>{row.voucherDate || "-"}</td>
                                                 <td>{row.voucherNo || "-"}</td>
                                                 <td>{row.voucherType || "-"}</td>
@@ -141,11 +137,11 @@ const InvoiceTracking = () => {
                                     )}
                                 </tbody>
                             </table>
-                    </div>
+                        </div>
 
-                    {/* References Table - Always show */}
-                    <div className="table-responsive px-3 pb-3">
-                        <table className="table table-bordered align-middle mb-0">
+                        {/* TABLE 2 — References */}
+                        <div className="table-responsive px-3 pb-4">
+                            <table className="table table-bordered table-sm align-middle mb-0">
                                 <thead className="table-light">
                                     <tr>
                                         <th>Sl.No</th>
@@ -163,23 +159,24 @@ const InvoiceTracking = () => {
                                         <th>Created Date</th>
                                     </tr>
                                 </thead>
+
                                 <tbody>
                                     {loading ? (
                                         <tr>
-                                            <td colSpan="13" className="text-center py-4">
-                                                <div className="spinner-border text-primary"></div> Loading...
+                                            <td colSpan="13" className="text-center py-3">
+                                                <div className="spinner-border text-primary"></div>
                                             </td>
                                         </tr>
                                     ) : references.length === 0 ? (
                                         <tr>
-                                            <td colSpan="13" className="text-center py-4">
-                                                No data available in table
+                                            <td colSpan="13" className="text-center py-3">
+                                                No data available
                                             </td>
                                         </tr>
                                     ) : (
-                                        references.map((row, index) => (
-                                            <tr key={index}>
-                                                <td>{index + 1}</td>
+                                        references.map((row, i) => (
+                                            <tr key={i}>
+                                                <td>{i + 1}</td>
                                                 <td>{row.refno || "-"}</td>
                                                 <td>{row.refDate || "-"}</td>
                                                 <td>{row.voucherDate || "-"}</td>
@@ -197,9 +194,11 @@ const InvoiceTracking = () => {
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };

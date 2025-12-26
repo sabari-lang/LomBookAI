@@ -18,7 +18,7 @@ import { applyJobDefaults, applyShipmentTermPaymentLogic, normalizeJobDates } fr
 
 const baseInitialValues = {
     jobNo: "",
-    masterDate: null,
+    masterDate: moment().toDate(),
     blType: "Master B/L",
     consol: "Consol",
     exportType: "Export",
@@ -129,10 +129,21 @@ const JobCreation = ({ editData, setEditData }) => {
         }
 
         setIsLoadingEdit(true);
+        
+        // Normalize backend keys to form keys
+        const normalizedEditData = {
+            ...editData,
+            // Map backend keys to form keys (preserve if already present)
+            consigneeName: editData.consigneeName || editData.consignee || "",
+            consigneeAddress: editData.consigneeAddress || editData.consigneeAddr || "",
+            shipperName: editData.shipperName || editData.shipper || "",
+            shipperAddress: editData.shipperAddress || editData.shipperAddr || "",
+        };
+        
         const merged = applyShipmentTermPaymentLogic(
             applyJobDefaults({
                 ...initialValues, // BASE DEFAULTS
-                ...editData,        // OVERRIDE WITH API DATA
+                ...normalizedEditData,        // OVERRIDE WITH API DATA
                 arrivalDate: editData?.arrivalDate
                     ? moment(editData.arrivalDate).format("YYYY-MM-DD")
                     : "",
@@ -146,6 +157,9 @@ const JobCreation = ({ editData, setEditData }) => {
             })
         );
         reset(merged);
+
+        // Initialize prevConsolRef to prevent consol-change useEffect from clearing consignee
+        prevConsolRef.current = merged?.consol || null;
 
         // Reset checkbox states based on loaded data
         const notifyName = editData?.notifyName || "";
@@ -182,12 +196,12 @@ const JobCreation = ({ editData, setEditData }) => {
         if (isEditing) return;
 
         const isConsol = consolValue === "Consol" || consolValue === "CONSOL";
-        
+
         if (isConsol) {
             // Only auto-fill if fields are empty (don't overwrite user input)
             const currentName = watch("shipperName");
             const currentAddress = watch("shipperAddress");
-            
+
             if (!currentName && !currentAddress) {
                 setValue("shipperName", DEFAULT_SHIPPER.shipperName);
                 setValue("shipperAddress", DEFAULT_SHIPPER.shipperAddress);
@@ -196,8 +210,8 @@ const JobCreation = ({ editData, setEditData }) => {
             // When Single is selected, clear defaults (only if they match default values)
             const currentName = watch("shipperName");
             const currentAddress = watch("shipperAddress");
-            
-            if (currentName === DEFAULT_SHIPPER.shipperName && 
+
+            if (currentName === DEFAULT_SHIPPER.shipperName &&
                 currentAddress === DEFAULT_SHIPPER.shipperAddress) {
                 setValue("shipperName", "");
                 setValue("shipperAddress", "");
@@ -208,7 +222,7 @@ const JobCreation = ({ editData, setEditData }) => {
     // Consol/Single change handler - always clear consignee + notify on change
     useEffect(() => {
         if (isLoadingEdit) return;
-        
+
         // Only clear if consol actually changed (not on initial mount)
         if (prevConsolRef.current !== null && prevConsolRef.current !== consolValue) {
             // Always clear consignee and notify when consol changes
@@ -219,7 +233,7 @@ const JobCreation = ({ editData, setEditData }) => {
             setSameAsConsignee(false);
             setCopyAsConsignee(false);
         }
-        
+
         prevConsolRef.current = consolValue;
     }, [consolValue, setValue, isLoadingEdit]);
 
@@ -286,7 +300,7 @@ const JobCreation = ({ editData, setEditData }) => {
     useEffect(() => {
         // Skip auto-population during edit mode load
         if (isLoadingEdit) return;
-        
+
         // Clear prior mandatory field errors
         clearErrors(["airportDeparture", "airportDestination", "arrivalDate"]);
 
@@ -317,7 +331,7 @@ const JobCreation = ({ editData, setEditData }) => {
         if (!isEditing || !watch("freightTerm")) {
             setValue("freightTerm", config.freightTerm);
         }
-applyTermPayments(shipment);
+        applyTermPayments(shipment);
 
         // Ensure global defaults are set (if empty)
         const currentDeclaredCarriage = watch("declaredCarriage");
@@ -355,15 +369,15 @@ applyTermPayments(shipment);
         // Map UI airWayBillAddress to API agentAddress
         payload.agentAddress = payload?.agentAddress || payload?.airWayBillAddress || "";
         // Keep wtvalPP, coll1, otherPP, coll2 as strings (P or C)
-        payload.wtvalPP = payload?.wtvalPP || "";
-        payload.coll1 = payload?.coll1 || "";
-        payload.otherPP = payload?.otherPP || "";
-        payload.coll2 = payload?.coll2 || "";
+        payload.wtvalPP = toNumberOrNull(payload?.wtvalPP) || null;
+        payload.coll1 = toNumberOrNull(payload?.coll1) || null;
+        payload.otherPP = toNumberOrNull(payload?.otherPP) || null;
+        payload.coll2 = toNumberOrNull(payload?.coll2) || null;
 
         // Keep declaredCarriage, declaredCustoms, insurance as strings
-        payload.declaredCarriage = payload?.declaredCarriage || "";
-        payload.declaredCustoms = payload?.declaredCustoms || "";
-        payload.insurance = payload?.insurance || "";
+        payload.declaredCarriage =toNumberOrNull(payload?.declaredCarriage) || null;
+        payload.declaredCustoms =toNumberOrNull(payload?.declaredCustoms) || null;
+        payload.insurance =toNumberOrNull(payload?.insurance) || null;
 
         // Convert arranged checkbox → 1 or 0
         payload.arranged = payload?.arranged ? 1 : 0;
@@ -490,7 +504,7 @@ applyTermPayments(shipment);
                                                 </>
                                             )}
                                         />
-</div>
+                                    </div>
 
                                     <div className="col-md-3">
                                         <label className="fw-bold">B/L Type</label>

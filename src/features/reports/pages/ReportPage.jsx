@@ -397,23 +397,13 @@ const ReportPage = () => {
   });
 
   return (
-    <div className="p-3">
-      {/* Breadcrumb */}
-      <nav aria-label="breadcrumb" className="mb-3">
-        <ol className="breadcrumb">
-          <li className="breadcrumb-item">
-            <Link to="/">Home</Link>
-          </li>
-          <li className="breadcrumb-item active" aria-current="page">
-            {reportConfig.title}
-          </li>
-        </ol>
-      </nav>
+    <div className="p-4">
+
 
       {/* Header */}
       <div
-        className="p-2 mb-3 rounded-0 text-white"
-        style={{ backgroundColor: reportConfig.headerColor }}
+        className="p-2   text-white"
+        style={{ backgroundColor: reportConfig.headerColor,borderTopLeftRadius: '5px',borderTopRightRadius: '5px' }}
       >
         <h6
           className="mb-0 tw-font-semibold tw-tracking-wide tw-text-sm md:tw-text-base "

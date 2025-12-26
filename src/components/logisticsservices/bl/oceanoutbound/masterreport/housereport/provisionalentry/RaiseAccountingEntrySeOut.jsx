@@ -34,7 +34,7 @@ const RaiseAccountingEntrySeaOut = ({ editData, setEditData }) => {
     const hblNo = safeStr(storedHouse?.hbl || storedHouse?.hblNo || storedHouse?.houseNumber);
 
     const isEditing = Boolean(editData?.id || editData?._id);
-    
+
     const [open, setOpen] = useState(false);
 
     // Helper function to format date for input[type="date"]
@@ -61,14 +61,14 @@ const RaiseAccountingEntrySeaOut = ({ editData, setEditData }) => {
     // Normalize provisional entries to the format expected by the table
     const provisionalList = useMemo(() => {
         if (!provisionalApiRaw) return [];
-        
+
         const entries = extractItems(provisionalApiRaw) ?? [];
-        
+
         // Flatten all entries and their items into a single list
         return entries.flatMap((entry = {}) => {
             const items = Array.isArray(entry?.items) ? entry.items : [];
             if (items.length === 0) return [];
-            
+
             return items.map((it) => ({
                 date: safeStr(it?.provisionalDate ?? it?.date ?? entry?.provisionalDate ?? entry?.date ?? ""),
                 status: safeStr(it?.status ?? entry?.status ?? "Accounting Entry (Pending)"),
@@ -130,7 +130,7 @@ const RaiseAccountingEntrySeaOut = ({ editData, setEditData }) => {
     const closeModal = () => {
         reset(defaultValues);
         if (setEditData) setEditData(null);
-        
+
         const modalElement = document.getElementById("seaoutraiseAccountingModalOut");
         if (modalElement) {
             const bootstrap = window.bootstrap;
@@ -189,7 +189,7 @@ const RaiseAccountingEntrySeaOut = ({ editData, setEditData }) => {
         safeArr(rows).map((it) => ({
             provisionalDate: safeStr(it.date),
             status: safeStr(it.status),
-            account: safeStr(it.account),
+            description: safeStr(it.account),
             sac: safeStr(it.sac),
             currency: safeStr(it.currency),
             qty: safeNum(it.qty),
@@ -267,10 +267,11 @@ const RaiseAccountingEntrySeaOut = ({ editData, setEditData }) => {
                                         control={control}
                                         render={({ field }) => (
                                             <select {...field} className="form-select">
-                                                <option value="">--Select--</option>
-                                                <option value="Purchase">Purchase</option>
+                                                <option value="">--Select Type--</option>
                                                 <option value="Sales">Sales</option>
                                                 <option value="Journal">Journal</option>
+                                                <option value="Credit Note">Credit Note</option>
+                                                <option value="Debit Note">Debit Note</option>
                                             </select>
                                         )}
                                     />
@@ -499,8 +500,8 @@ const RaiseAccountingEntrySeaOut = ({ editData, setEditData }) => {
                             Cancel
                         </button>
 
-                        <button 
-                            className="btn btn-primary" 
+                        <button
+                            className="btn btn-primary"
                             onClick={handleSubmit(onSubmit)}
                             disabled={createMutation.isLoading || updateMutation.isLoading}
                         >
@@ -525,7 +526,7 @@ const RaiseAccountingEntrySeaOut = ({ editData, setEditData }) => {
                     <CustomerSearch
                         onSelect={(cust) => {
                             const name = cust?.displayName ?? cust?.customerName ?? cust?.name ?? "";
-                            const address = cust?.billingAddress?.street1 
+                            const address = cust?.billingAddress?.street1
                                 ? `${cust.billingAddress.street1}${cust.billingAddress.street2 ? ', ' + cust.billingAddress.street2 : ''}${cust.billingAddress.city ? ', ' + cust.billingAddress.city : ''}${cust.billingAddress.state ? ', ' + cust.billingAddress.state : ''}${cust.billingAddress.pincode ? ' - ' + cust.billingAddress.pincode : ''}`
                                 : (cust?.address ?? "");
                             const gstin = cust?.gstin ?? cust?.gstNumber ?? cust?.taxId ?? "";

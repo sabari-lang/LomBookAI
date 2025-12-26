@@ -34,10 +34,10 @@ const QuotationList = ({ mode = "N" }) => {
 
     const sortedQuotations = [...quotations].sort((a, b) => {
         if (!sortColumn) return 0;
-        
+
         let aVal = a[sortColumn];
         let bVal = b[sortColumn];
-        
+
         if (sortColumn === "date" || sortColumn === "expiryDate") {
             aVal = aVal ? new Date(aVal).getTime() : 0;
             bVal = bVal ? new Date(bVal).getTime() : 0;
@@ -45,7 +45,7 @@ const QuotationList = ({ mode = "N" }) => {
             aVal = String(aVal || "").toLowerCase();
             bVal = String(bVal || "").toLowerCase();
         }
-        
+
         if (sortDirection === "asc") {
             return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
         } else {
@@ -70,18 +70,10 @@ const QuotationList = ({ mode = "N" }) => {
     return (
         <div className="container-fluid p-0">
             <div className="card shadow-sm m-3">
-                {/* Breadcrumb */}
-                <div className="d-flex justify-content-end px-3 pt-2 small text-muted">
-                    <nav aria-label="breadcrumb">
-                        <ol className="breadcrumb mb-0">
-                            <li className="breadcrumb-item"><a href="#/">Home</a></li>
-                            <li className="breadcrumb-item active" aria-current="page">Quotation</li>
-                        </ol>
-                    </nav>
-                </div>
+
 
                 {/* Title Bar - Teal/Blue Background */}
-                <div className={`${headerBgClass} text-white fw-semibold px-3 py-2 d-flex justify-content-between align-items-center`}>
+                <div className={`${headerBgClass} text-white fw-semibold rounded-1 px-3 py-2 d-flex justify-content-between align-items-center`}>
                     <div className="fw-semibold">{titleText}</div>
                     <button
                         className="btn btn-success btn-sm"

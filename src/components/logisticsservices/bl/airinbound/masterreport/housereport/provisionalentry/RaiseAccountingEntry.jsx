@@ -71,14 +71,14 @@ const RaiseAccountingEntry = ({ editData }) => {
         const entries = extractItems(provisionalApiRaw) ?? [];
         
         // Flatten all entries and their items into a single list
-        return entries.flatMap((entry = {}) => {
+        return entries?.flatMap((entry = {}) => {
             const items = Array.isArray(entry?.items) ? entry.items : [];
             if (items.length === 0) return [];
             
-            return items.map((it) => ({
+            return items?.map((it) => ({
                 date: safeStr(it?.provisionalDate ?? it?.date ?? entry?.provisionalDate ?? entry?.date ?? ""),
                 status: safeStr(it?.status ?? entry?.status ?? "Accounting Entry (Pending)"),
-                account: safeStr(it?.account ?? it?.accountService ?? it?.description ?? ""),
+                description: safeStr(it?.account ?? it?.accountService ?? it?.description ?? ""),
                 sac: safeStr(it?.sac ?? ""),
                 currency: safeStr(it?.currency ?? "INR"),
                 qty: safeNum(it?.qty ?? 1),
@@ -195,7 +195,7 @@ const RaiseAccountingEntry = ({ editData }) => {
         safeArr(rows).map((it) => ({
             provisionalDate: safeStr(it?.date),
             status: safeStr(it?.status),
-            account: safeStr(it?.account),
+            description: safeStr(it?.description),
             sac: safeStr(it?.sac),
             currency: safeStr(it?.currency),
             qty: safeNum(it?.qty),
@@ -483,7 +483,7 @@ const RaiseAccountingEntry = ({ editData }) => {
                                             <tr key={i}>
                                                 <td>{row.date ? moment(row.date).format('DD-MM-YYYY') : '-'}</td>
                                                 <td>{row.status}</td>
-                                                <td>{row.account}</td>
+                                                <td>{row.description}</td>
                                                 <td>{row.sac}</td>
                                                 <td>{row.currency}</td>
                                                 <td>{row.qty ?? 1}</td>
@@ -585,7 +585,7 @@ const RaiseAccountingEntry = ({ editData }) => {
                                 : (cust?.address ?? "");
                             const gstin = cust?.gstin ?? cust?.gstNumber ?? cust?.taxId ?? "";
                             const tel = cust?.phone ?? cust?.workPhone ?? "";
-                            const fax = cust?.fax ?? "";
+                            const fax = cust?.billingAddress?.fax ?? "";
                             const mobile = cust?.mobilePhone ?? cust?.mobile ?? "";
 
                             setValue("partyName", name);

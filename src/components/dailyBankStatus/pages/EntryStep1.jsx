@@ -43,7 +43,14 @@ const EntryStep1 = () => {
                                     >
                                         <option value="INR">INR</option>
                                         <option value="USD">USD</option>
+                                        <option value="ODEX">ODEX</option>
+                                        <option value="FIXED DEPOSIT">FIXED DEPOSIT</option>
+                                        <option value="FD TYPE">FD TYPE</option>
+                                        <option value="OD TYPE">OD TYPE</option>
+                                        <option value="RECEIVED">RECEIVED</option>
+                                        <option value="PAID">PAID</option>
                                     </select>
+
                                 </div>
 
                                 <div className="mb-2">

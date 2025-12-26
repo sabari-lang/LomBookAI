@@ -180,8 +180,8 @@ const RaiseAccountingEntryOut = ({ editData }) => {
     const normalizeItems = (rows) =>
         safeArr(rows).map((it) => ({
             provisionalDate: safeStr(it.date),
-            status: safeStr(it.status),
-            account: safeStr(it.account),
+            status: safeStr(it.integrationStatus),
+            description: safeStr(it.account),
             sac: safeStr(it.sac),
             currency: safeStr(it.currency),
             qty: safeNum(it.qty),

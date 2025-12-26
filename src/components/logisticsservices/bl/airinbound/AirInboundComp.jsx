@@ -243,7 +243,7 @@ const AirInboundComp = () => {
                                                     data-bs-toggle="modal"
                                                     data-bs-target="#createInboundJobcreationModal"
                                                     onClick={() => {
-                                                        setSelectedBL(row);
+                                                        setEditData(row);
                                                     }}
                                                 >
                                                     <FontAwesomeIcon icon={faPenToSquare} />

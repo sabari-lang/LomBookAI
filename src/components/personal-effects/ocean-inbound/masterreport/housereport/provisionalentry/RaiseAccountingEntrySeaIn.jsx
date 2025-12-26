@@ -33,7 +33,7 @@ const RaiseAccountingEntrySeaIn = ({ editData, setEditData }) => {
     const hblNo = safeStr(storedHouse?.hbl || storedHouse?.hblNo);
 
     const isEditing = Boolean(editData?._id || editData?.id);
-    
+
     const [open, setOpen] = useState(false);
 
     // Helper function to format date for input[type="date"]
@@ -270,10 +270,11 @@ const RaiseAccountingEntrySeaIn = ({ editData, setEditData }) => {
                                             control={control}
                                             render={({ field }) => (
                                                 <select {...field} className="form-select">
-                                                    <option value="">--Select--</option>
-                                                    <option value="Purchase">Purchase</option>
+                                                    <option value="">--Select Type--</option>
                                                     <option value="Sales">Sales</option>
                                                     <option value="Journal">Journal</option>
+                                                    <option value="Credit Note">Credit Note</option>
+                                                    <option value="Debit Note">Debit Note</option>
                                                 </select>
                                             )}
                                         />
@@ -580,14 +581,23 @@ const RaiseAccountingEntrySeaIn = ({ editData, setEditData }) => {
                     >
                         <CustomerSearch
                             onSelect={(cust) => {
-                                const name = cust?.displayName ?? cust?.customerName ?? cust?.name ?? "";
-                                const address = cust?.billingAddress?.street1
-                                    ? `${cust.billingAddress.street1}${cust.billingAddress.street2 ? ', ' + cust.billingAddress.street2 : ''}${cust.billingAddress.city ? ', ' + cust.billingAddress.city : ''}${cust.billingAddress.state ? ', ' + cust.billingAddress.state : ''}${cust.billingAddress.pincode ? ' - ' + cust.billingAddress.pincode : ''}`
-                                    : (cust?.address ?? "");
+                                const name =
+                                    cust?.displayName ??
+                                    cust?.customerName ??
+                                    cust?.name ??
+                                    `${cust?.firstName ?? ""} ${cust?.lastName ?? ""}`.trim();
+
+                                const billing = cust?.billingAddress ?? {};
+
+                                const address = billing.addressLine1
+                                    ? `${billing.addressLine1}${billing.addressLine2 ? ", " + billing.addressLine2 : ""}${billing.city ? ", " + billing.city : ""}${billing.state ? ", " + billing.state : ""}${billing.pinCode ? " - " + billing.pinCode : ""}`
+                                    : cust?.address ?? "";
+
                                 const gstin = cust?.gstin ?? cust?.gstNumber ?? cust?.taxId ?? "";
-                                const tel = cust?.phone ?? cust?.workPhone ?? "";
-                                const fax = cust?.fax ?? "";
-                                const mobile = cust?.mobilePhone ?? cust?.mobile ?? "";
+
+                                const tel = cust?.phoneWork ?? billing.phone ?? "";
+                                const fax = billing.fax ?? cust?.fax ?? "";
+                                const mobile = cust?.phoneMobile ?? cust?.mobile ?? "";
 
                                 setValue("partyName", name);
                                 setValue("partyAddress", address);
@@ -601,6 +611,7 @@ const RaiseAccountingEntrySeaIn = ({ editData, setEditData }) => {
                         />
                     </NewWindow>
                 )}
+
             </div>
         </>
     );

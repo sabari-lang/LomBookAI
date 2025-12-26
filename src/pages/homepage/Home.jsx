@@ -144,7 +144,7 @@ const Home = () => {
   }
 
   return (
-    <div className="tw-min-h-screen tw-bg-gradient-to-br tw-from-slate-50 tw-via-white tw-to-slate-50">
+    <div className="tw-min-h-screen" style={{ backgroundColor: '#F6FCFF' }}>
       {/* Simple top bar */}
       <nav className="navbar navbar-expand-lg bg-white border-bottom">
         <div className="container py-2">
@@ -190,12 +190,12 @@ const Home = () => {
             {FEATURES.map((f) => (
               <div className="col-12 col-md-4" key={f.key}>
                 <div
-                  className="card h-100 shadow-sm border-0 tw-transition tw-duration-200 hover:tw-shadow-md hover:-tw-translate-y-0.5"
+                  className="card h-100 border-0 tw-transition tw-duration-200 hover:tw-shadow-md hover:-tw-translate-y-0.5"
                   role="button"
                   tabIndex={0}
                   onClick={() => handleCardClick(f.key)}
                   onKeyDown={(e) => handleCardKeyDown(e, f.key)}
-                  style={{ cursor: 'pointer' }}
+                  style={{ cursor: 'pointer', boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}
                 >
                   <div className="card-body p-4">
                     <div className="d-flex align-items-start gap-3">

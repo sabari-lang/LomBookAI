@@ -130,7 +130,7 @@ const NewCustomer = () => {
       const contactPersons = state?.contactPersons?.length > 0
         ? state?.contactPersons
         : initialValues?.contactPersons;
-      
+
       reset({
         ...initialValues,
         ...state,
@@ -150,7 +150,7 @@ const NewCustomer = () => {
         customFields: state?.customFields || initialValues?.customFields || [], // Include in reset
         reportingTags: state?.reportingTags || initialValues?.reportingTags || [], // Include in reset
       });
-      
+
       // RHF best practice: use replace() for useFieldArray after reset() to ensure field array is properly updated
       // This prevents remount issues with useFieldArray
       if (contactPersons && contactPersons.length > 0) {
@@ -239,8 +239,8 @@ const NewCustomer = () => {
     const payload = {
       ...data,
       // Ensure openingBalance is a number
-      openingBalance: typeof data?.openingBalance === 'number' 
-        ? data.openingBalance 
+      openingBalance: typeof data?.openingBalance === 'number'
+        ? data.openingBalance
         : Number(data?.openingBalance) || 0,
       // Ensure boolean values
       allowPortal: Boolean(data?.allowPortal),
@@ -856,6 +856,7 @@ const NewCustomer = () => {
                     "state",
                     "pincode",
                     "phone",
+                    "fax"   // ➜ Added here
                   ].map((fieldKey) => (
                     <div className="mb-2" key={fieldKey}>
                       <Controller
@@ -887,6 +888,7 @@ const NewCustomer = () => {
                       />
                     </div>
                   ))}
+
                 </div>
 
                 <div className="col-md-6">
@@ -909,6 +911,7 @@ const NewCustomer = () => {
                     "state",
                     "pincode",
                     "phone",
+                    "fax"   // ➜ Added here
                   ].map((fieldKey) => (
                     <div className="mb-2" key={fieldKey}>
                       <Controller
@@ -940,6 +943,7 @@ const NewCustomer = () => {
                       />
                     </div>
                   ))}
+
                 </div>
               </div>
             </div>

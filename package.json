@@ -1,7 +1,7 @@
 {
   "name": "lom-book",
   "private": true,
-  "version": "1.0.22",
+  "version": "1.0.23",
   "description": "LOM Book Desktop Application",
   "author": "Sabari",
   "main": "electron/main.js",

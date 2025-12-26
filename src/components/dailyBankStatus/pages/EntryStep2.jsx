@@ -84,14 +84,7 @@ const EntryStep2 = () => {
     return (
         <div className="container-fluid p-0">
             <div className="card shadow-sm m-3">
-                <div className="d-flex justify-content-end px-3 pt-2 small text-muted">
-                    <nav aria-label="breadcrumb">
-                        <ol className="breadcrumb mb-0">
-                            <li className="breadcrumb-item"><a href="#/">Home</a></li>
-                            <li className="breadcrumb-item active" aria-current="page">Daily Bank Status Entry</li>
-                        </ol>
-                    </nav>
-                </div>
+             
 
                 <div className="bg-warning text-dark fw-semibold px-3 py-2">
                     <h5 className="m-0">Daily Bank Status Entry</h5>

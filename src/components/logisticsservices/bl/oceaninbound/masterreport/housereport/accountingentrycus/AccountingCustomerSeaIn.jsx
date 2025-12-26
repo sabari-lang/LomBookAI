@@ -87,7 +87,7 @@ const AccountingCustomerSeaIn = () => {
                 id: entry.id,
                 voucherDate: entry.voucherDate || "",
                 voucherNo: entry.voucherNo || "",
-                status: entry.status || "",
+                status: entry.status ?? entry.integrationStatus ?? "",
                 voucherType: entry.voucherType || "",
                 hawbNo: entry.hblNo ?? entry.hbl ?? "",
                 partyName: entry.partyName ?? "",
@@ -107,7 +107,7 @@ const AccountingCustomerSeaIn = () => {
             id: entry.id,
             voucherDate: entry.voucherDate || "",
             voucherNo: entry.voucherNo || "",
-            status: entry.status || "",
+            status: entry.status ?? entry.integrationStatus ?? "",
             voucherType: entry.voucherType || "",
             hawbNo: entry.hblNo ?? entry.hbl ?? "",
             partyName: entry.partyName ?? "",
@@ -188,7 +188,7 @@ const AccountingCustomerSeaIn = () => {
     const handleDelete = async (row) => {
         if (!row?.id) return notifyError("Missing ID!");
         const confirmed = await confirm("Delete this entry?");
-    if (!confirmed) return;
+        if (!confirmed) return;
 
         deleteMutation.mutate({ id: row.id });
     };

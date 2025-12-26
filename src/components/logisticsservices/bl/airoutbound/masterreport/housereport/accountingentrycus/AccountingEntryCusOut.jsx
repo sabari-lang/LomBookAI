@@ -71,7 +71,7 @@ const AccountingEntryCusOut = () => {
                 id: entry.id,
                 voucherDate: entry.voucherDate || "",
                 voucherNo: entry.voucherNo || "",
-                status: entry.status || "",
+                status: entry.status ?? entry.integrationStatus ?? "",
                 voucherType: entry.voucherType || "",
                 hawbNo: entry.hawbno ?? entry.hawbNo ?? "",
                 partyName: entry.partyName ?? "",
@@ -91,7 +91,7 @@ const AccountingEntryCusOut = () => {
             id: entry.id,
             voucherDate: entry.voucherDate || "",
             voucherNo: entry.voucherNo || "",
-            status: entry.status || "",
+            status: entry.status ?? entry.integrationStatus ?? "",
             voucherType: entry.voucherType || "",
             hawbNo: entry.hawbno ?? entry.hawbNo ?? "",
             partyName: entry.partyName ?? "",
@@ -162,7 +162,7 @@ const AccountingEntryCusOut = () => {
     const handleDelete = async (row) => {
         if (!row?.id) return notifyError("Missing ID");
         const confirmed = await confirm("Are you sure?");
-    if (!confirmed) return;
+        if (!confirmed) return;
         deleteMutation.mutate({ id: row.id });
     };
 

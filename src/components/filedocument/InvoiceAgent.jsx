@@ -580,12 +580,13 @@ export default function InvoiceAgent() {
                                 <button
                                   className="dropdown-item"
                                   type="button"
+                                  data-bs-toggle="modal"
+                                  data-bs-target="#createInboundJobcreationModal"
                                   onClick={() => {
                                     setOpenDropdown(null);
-                                  console.log("AirInbound convert payload:", r?.raw?.jobCreation);
+                                    console.log("AirInbound convert payload:", r?.raw?.jobCreation);
                                     const mapped = mapSchemaToAirInboundEditData(r.raw?.jobCreation || null);
                                     setEditDataAirInbound(mapped);
-                                  setTimeout(() => openBootstrapModalById("createInboundJobcreationModal"), 0);
                                   }}
                                 >
                                   Convert to air-inbound job creation
